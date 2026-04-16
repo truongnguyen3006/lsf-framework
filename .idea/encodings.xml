@@ -33,8 +33,8 @@
     <file url="file://$PROJECT_DIR$/lsf-outbox-mysql-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/lsf-outbox-postgres-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/lsf-outbox-postgres-starter/src/main/resources" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/lsf-quota-streams-starter/src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/lsf-quota-streams-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/lsf-quota-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/lsf-quota-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/lsf-resilience-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/lsf-resilience-starter/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/lsf-saga-redis-starter/src/main/java" charset="UTF-8" />

@@ -9,7 +9,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>lsf-quota-streams-starter</artifactId>
+    <artifactId>lsf-quota-starter</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>

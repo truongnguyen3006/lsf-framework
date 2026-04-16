@@ -14,7 +14,7 @@
         <module>lsf-kafka-admin-starter</module>
         <module>lsf-contracts</module>
         <module>lsf-eventing-starter</module>
-        <module>lsf-quota-streams-starter</module>
+        <module>lsf-quota-starter</module>
         <module>lsf-observability-starter</module>
         <module>lsf-discovery-starter</module>
         <module>lsf-config-starter</module>
@@ -139,7 +139,7 @@
             </dependency>
             <dependency>
                 <groupId>com.myorg.lsf</groupId>
-                <artifactId>lsf-quota-streams-starter</artifactId>
+                <artifactId>lsf-quota-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

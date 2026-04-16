@@ -124,7 +124,7 @@
 
         <dependency>
             <groupId>com.myorg.lsf</groupId>
-            <artifactId>lsf-quota-streams-starter</artifactId>
+            <artifactId>lsf-quota-starter</artifactId>
         </dependency>
 
         <!-- nếu lsf-example chưa có redis -->
