@@ -8,6 +8,8 @@ public record OutboxAdminRow(
         String msgKey,
         String eventId,
         String eventType,
+        String correlationId,
+        String aggregateId,
         OutboxStatus status,
         int retryCount,
         Instant createdAt,

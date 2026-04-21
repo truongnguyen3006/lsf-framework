@@ -9,6 +9,7 @@ public class QuotaMetrics {
     private final Counter reserveDuplicate;
 
     private final Counter confirmOk;
+    private final Counter confirmDuplicate;
     private final Counter confirmNotFound;
 
     private final Counter releaseOk;
@@ -20,6 +21,7 @@ public class QuotaMetrics {
         this.reserveDuplicate = Counter.builder("lsf.quota.reserve").tag("outcome", "duplicate").tag("app", app).tag("backend", backend).register(r);
 
         this.confirmOk        = Counter.builder("lsf.quota.confirm").tag("outcome", "ok").tag("app", app).tag("backend", backend).register(r);
+        this.confirmDuplicate = Counter.builder("lsf.quota.confirm").tag("outcome", "duplicate").tag("app", app).tag("backend", backend).register(r);
         this.confirmNotFound  = Counter.builder("lsf.quota.confirm").tag("outcome", "not_found").tag("app", app).tag("backend", backend).register(r);
 
         this.releaseOk        = Counter.builder("lsf.quota.release").tag("outcome", "ok").tag("app", app).tag("backend", backend).register(r);
@@ -31,6 +33,7 @@ public class QuotaMetrics {
     public void incReserveDuplicate() { reserveDuplicate.increment(); }
 
     public void incConfirmOk() { confirmOk.increment(); }
+    public void incConfirmDuplicate() { confirmDuplicate.increment(); }
     public void incConfirmNotFound() { confirmNotFound.increment(); }
 
     public void incReleaseOk() { releaseOk.increment(); }

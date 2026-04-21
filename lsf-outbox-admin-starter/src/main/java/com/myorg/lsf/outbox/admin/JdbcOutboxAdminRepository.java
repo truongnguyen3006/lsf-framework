@@ -27,12 +27,13 @@ public class JdbcOutboxAdminRepository {
                                      String topic,
                                      String msgKey,
                                      String eventType,
+                                     String correlationId,
                                      Instant from,
                                      Instant to,
                                      int limit,
                                      int offset) {
         StringBuilder sql = new StringBuilder("""
-            SELECT id, topic, msg_key, event_id, event_type, status,
+            SELECT id, topic, msg_key, event_id, event_type, correlation_id, aggregate_id, status,
                    created_at, sent_at, retry_count, last_error,
                    lease_owner, lease_until, next_attempt_at
             FROM %s
@@ -63,6 +64,11 @@ public class JdbcOutboxAdminRepository {
             p.addValue("eventType", eventType.trim());
         }
 
+        if (correlationId != null && !correlationId.isBlank()) {
+            sql.append(" AND correlation_id = :correlationId ");
+            p.addValue("correlationId", correlationId.trim());
+        }
+
         if (from != null) {
             sql.append(" AND created_at >= :from ");
             p.addValue("from", Timestamp.from(from));
@@ -81,6 +87,8 @@ public class JdbcOutboxAdminRepository {
                 rs.getString("msg_key"),
                 rs.getString("event_id"),
                 rs.getString("event_type"),
+                rs.getString("correlation_id"),
+                rs.getString("aggregate_id"),
                 OutboxStatus.from(rs.getString("status")),
                 rs.getInt("retry_count"),
                 tsToInstant(rs.getTimestamp("created_at")),
@@ -94,7 +102,7 @@ public class JdbcOutboxAdminRepository {
 
     public Optional<OutboxAdminRow> findByEventId(String eventId) {
         String sql = """
-                SELECT id, topic, msg_key, event_id, event_type, status,
+                SELECT id, topic, msg_key, event_id, event_type, correlation_id, aggregate_id, status,
                        created_at, sent_at, retry_count, last_error,
                        lease_owner, lease_until, next_attempt_at
                 FROM %s
@@ -107,6 +115,8 @@ public class JdbcOutboxAdminRepository {
                 rs.getString("msg_key"),
                 rs.getString("event_id"),
                 rs.getString("event_type"),
+                rs.getString("correlation_id"),
+                rs.getString("aggregate_id"),
                 OutboxStatus.from(rs.getString("status")),
                 rs.getInt("retry_count"),
                 tsToInstant(rs.getTimestamp("created_at")),
@@ -122,7 +132,7 @@ public class JdbcOutboxAdminRepository {
 
     public Optional<OutboxAdminRow> findById(long id) {
         String sql = """
-            SELECT id, topic, msg_key, event_id, event_type, status,
+            SELECT id, topic, msg_key, event_id, event_type, correlation_id, aggregate_id, status,
                    created_at, sent_at, retry_count, last_error,
                    lease_owner, lease_until, next_attempt_at
             FROM %s
@@ -135,6 +145,8 @@ public class JdbcOutboxAdminRepository {
                 rs.getString("msg_key"),
                 rs.getString("event_id"),
                 rs.getString("event_type"),
+                rs.getString("correlation_id"),
+                rs.getString("aggregate_id"),
                 OutboxStatus.from(rs.getString("status")),
                 rs.getInt("retry_count"),
                 tsToInstant(rs.getTimestamp("created_at")),

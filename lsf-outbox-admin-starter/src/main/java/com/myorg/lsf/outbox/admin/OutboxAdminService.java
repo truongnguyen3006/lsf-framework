@@ -19,13 +19,24 @@ public class OutboxAdminService {
                                      String topic,
                                      String msgKey,
                                      String eventType,
+                                     String correlationId,
                                      Instant from,
                                      Instant to,
                                      Integer limit,
                                      Integer offset) {
         int lim = clamp(limit != null ? limit : props.getDefaultLimit());
         int off = Math.max(0, offset != null ? offset : 0);
-        return repo.list(statuses, topic, normalize(msgKey), normalize(eventType), from, to, lim, off);
+        return repo.list(
+                statuses,
+                topic,
+                normalize(msgKey),
+                normalize(eventType),
+                normalize(correlationId),
+                from,
+                to,
+                lim,
+                off
+        );
     }
 
     public Optional<OutboxAdminRow> findByEventId(String eventId) {

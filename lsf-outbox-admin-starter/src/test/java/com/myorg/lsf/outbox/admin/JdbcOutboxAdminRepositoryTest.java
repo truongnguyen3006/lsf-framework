@@ -36,6 +36,8 @@ class JdbcOutboxAdminRepositoryTest {
                     msg_key VARCHAR(255),
                     event_id VARCHAR(255) NOT NULL,
                     event_type VARCHAR(255),
+                    correlation_id VARCHAR(255),
+                    aggregate_id VARCHAR(255),
                     status VARCHAR(32) NOT NULL,
                     created_at TIMESTAMP NOT NULL,
                     sent_at TIMESTAMP NULL,
@@ -50,15 +52,16 @@ class JdbcOutboxAdminRepositoryTest {
 
     @Test
     void shouldListRowsByFiltersAndOrderNewestFirst() {
-        insertRow("orders", "key-1", "evt-1", "orders.created.v1", "SENT", Instant.parse("2026-04-06T10:00:00Z"), 0, null, null, null, Instant.parse("2026-04-06T10:01:00Z"));
-        insertRow("orders", "key-2", "evt-2", "orders.failed.v1", "FAILED", Instant.parse("2026-04-06T11:00:00Z"), 3, "boom", "node-a", Instant.parse("2026-04-06T11:05:00Z"), Instant.parse("2026-04-06T11:10:00Z"));
-        insertRow("payments", "key-3", "evt-3", "payments.failed.v1", "FAILED", Instant.parse("2026-04-06T12:00:00Z"), 1, "boom", null, null, null);
+        insertRow("orders", "key-1", "evt-1", "orders.created.v1", "corr-1", "agg-1", "SENT", Instant.parse("2026-04-06T10:00:00Z"), 0, null, null, null, Instant.parse("2026-04-06T10:01:00Z"));
+        insertRow("orders", "key-2", "evt-2", "orders.failed.v1", "corr-2", "agg-2", "FAILED", Instant.parse("2026-04-06T11:00:00Z"), 3, "boom", "node-a", Instant.parse("2026-04-06T11:05:00Z"), Instant.parse("2026-04-06T11:10:00Z"));
+        insertRow("payments", "key-3", "evt-3", "payments.failed.v1", "corr-3", "agg-3", "FAILED", Instant.parse("2026-04-06T12:00:00Z"), 1, "boom", null, null, null);
 
         List<OutboxAdminRow> rows = repository.list(
                 List.of(OutboxStatus.FAILED),
                 "orders",
                 "key-2",
                 "orders.failed.v1",
+                "corr-2",
                 Instant.parse("2026-04-06T10:30:00Z"),
                 Instant.parse("2026-04-06T11:30:00Z"),
                 10,
@@ -68,6 +71,8 @@ class JdbcOutboxAdminRepositoryTest {
         assertThat(rows).hasSize(1);
         OutboxAdminRow row = rows.getFirst();
         assertThat(row.eventId()).isEqualTo("evt-2");
+        assertThat(row.correlationId()).isEqualTo("corr-2");
+        assertThat(row.aggregateId()).isEqualTo("agg-2");
         assertThat(row.status()).isEqualTo(OutboxStatus.FAILED);
         assertThat(row.retryCount()).isEqualTo(3);
         assertThat(row.leaseOwner()).isEqualTo("node-a");
@@ -75,7 +80,7 @@ class JdbcOutboxAdminRepositoryTest {
 
     @Test
     void shouldRequeueByEventIdResetRetryAndClearLeaseState() {
-        insertRow("orders", "key-2", "evt-2", "orders.failed.v1", "FAILED", Instant.parse("2026-04-06T11:00:00Z"), 5, "boom", "node-a", Instant.parse("2026-04-06T11:05:00Z"), Instant.parse("2026-04-06T11:10:00Z"));
+        insertRow("orders", "key-2", "evt-2", "orders.failed.v1", "corr-2", "agg-2", "FAILED", Instant.parse("2026-04-06T11:00:00Z"), 5, "boom", "node-a", Instant.parse("2026-04-06T11:05:00Z"), Instant.parse("2026-04-06T11:10:00Z"));
         Instant now = Instant.parse("2026-04-06T12:30:00Z");
 
         int updated = repository.requeueByEventId("evt-2", OutboxStatus.RETRY, true, now);
@@ -92,8 +97,8 @@ class JdbcOutboxAdminRepositoryTest {
 
     @Test
     void shouldRequeueFailedRowsRespectLimitAndSupportMarkFailedAndDelete() {
-        insertRow("orders", "key-1", "evt-1", "orders.failed.v1", "FAILED", Instant.parse("2026-04-06T10:00:00Z"), 2, "old", "node-a", Instant.parse("2026-04-06T10:05:00Z"), Instant.parse("2026-04-06T10:06:00Z"));
-        insertRow("orders", "key-2", "evt-2", "orders.failed.v1", "FAILED", Instant.parse("2026-04-06T10:10:00Z"), 4, "old", "node-b", Instant.parse("2026-04-06T10:15:00Z"), Instant.parse("2026-04-06T10:16:00Z"));
+        insertRow("orders", "key-1", "evt-1", "orders.failed.v1", "corr-1", "agg-1", "FAILED", Instant.parse("2026-04-06T10:00:00Z"), 2, "old", "node-a", Instant.parse("2026-04-06T10:05:00Z"), Instant.parse("2026-04-06T10:06:00Z"));
+        insertRow("orders", "key-2", "evt-2", "orders.failed.v1", "corr-2", "agg-2", "FAILED", Instant.parse("2026-04-06T10:10:00Z"), 4, "old", "node-b", Instant.parse("2026-04-06T10:15:00Z"), Instant.parse("2026-04-06T10:16:00Z"));
 
         int updated = repository.requeueFailed(1, false, Instant.parse("2026-04-06T13:00:00Z"));
 
@@ -119,6 +124,8 @@ class JdbcOutboxAdminRepositoryTest {
                            String msgKey,
                            String eventId,
                            String eventType,
+                           String correlationId,
+                           String aggregateId,
                            String status,
                            Instant createdAt,
                            int retryCount,
@@ -128,15 +135,17 @@ class JdbcOutboxAdminRepositoryTest {
                            Instant nextAttemptAt) {
         jdbc.update("""
                         INSERT INTO lsf_outbox (
-                            topic, msg_key, event_id, event_type, status,
+                            topic, msg_key, event_id, event_type, correlation_id, aggregate_id, status,
                             created_at, sent_at, retry_count, last_error,
                             lease_owner, lease_until, next_attempt_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 topic,
                 msgKey,
                 eventId,
                 eventType,
+                correlationId,
+                aggregateId,
                 status,
                 Timestamp.from(createdAt),
                 null,

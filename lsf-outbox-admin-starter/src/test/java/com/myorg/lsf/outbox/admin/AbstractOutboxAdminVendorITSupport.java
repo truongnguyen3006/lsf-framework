@@ -72,6 +72,7 @@ abstract class AbstractOutboxAdminVendorITSupport {
                 "orders",
                 " key-2 ",
                 " orders.failed.v1 ",
+                " corr-evt-2 ",
                 Instant.parse("2026-04-06T10:30:00Z"),
                 Instant.parse("2026-04-06T11:30:00Z"),
                 10,
@@ -82,6 +83,8 @@ abstract class AbstractOutboxAdminVendorITSupport {
         OutboxAdminRow row = rows.getFirst();
         assertThat(row.id()).isEqualTo(failedId);
         assertThat(row.eventId()).isEqualTo("evt-2");
+        assertThat(row.correlationId()).isEqualTo("corr-evt-2");
+        assertThat(row.aggregateId()).isEqualTo("agg-evt-2");
         assertThat(row.status()).isEqualTo(OutboxStatus.FAILED);
         assertThat(row.retryCount()).isEqualTo(3);
         assertThat(row.leaseOwner()).isEqualTo("node-a");

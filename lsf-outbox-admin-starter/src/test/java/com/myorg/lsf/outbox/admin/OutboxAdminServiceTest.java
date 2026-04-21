@@ -30,6 +30,7 @@ class OutboxAdminServiceTest {
                 " orders-topic ",
                 "  order-1  ",
                 "  payment.failed.v1  ",
+                "  workflow-1  ",
                 null,
                 null,
                 999,
@@ -40,6 +41,7 @@ class OutboxAdminServiceTest {
         assertThat(repo.listTopic).isEqualTo(" orders-topic ");
         assertThat(repo.listMsgKey).isEqualTo("order-1");
         assertThat(repo.listEventType).isEqualTo("payment.failed.v1");
+        assertThat(repo.listCorrelationId).isEqualTo("workflow-1");
         assertThat(repo.listLimit).isEqualTo(100);
         assertThat(repo.listOffset).isEqualTo(0);
     }
@@ -76,6 +78,7 @@ class OutboxAdminServiceTest {
         private String listTopic;
         private String listMsgKey;
         private String listEventType;
+        private String listCorrelationId;
         private int listLimit;
         private int listOffset;
 
@@ -85,11 +88,13 @@ class OutboxAdminServiceTest {
 
         @Override
         public List<OutboxAdminRow> list(List<OutboxStatus> statuses, String topic, String msgKey, String eventType,
+                                         String correlationId,
                                          Instant from, Instant to, int limit, int offset) {
             this.listStatuses = statuses;
             this.listTopic = topic;
             this.listMsgKey = msgKey;
             this.listEventType = eventType;
+            this.listCorrelationId = correlationId;
             this.listLimit = limit;
             this.listOffset = offset;
             return List.of();

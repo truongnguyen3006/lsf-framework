@@ -76,7 +76,7 @@ public class RedisQuotaService implements QuotaService, QuotaQueryFacade {
             return QuotaResult.builder().decision(QuotaDecision.ACCEPTED).state(QuotaState.CONFIRMED).used(used).limit(0).holdUntilEpochMs(0).build();
         }
         if (code == 2) {
-            if (metrics != null) metrics.incConfirmOk();
+            if (metrics != null) metrics.incConfirmDuplicate();
             return QuotaResult.builder().decision(QuotaDecision.DUPLICATE).state(QuotaState.CONFIRMED).used(used).limit(0).holdUntilEpochMs(0).build();
         }
         if (metrics != null) metrics.incConfirmNotFound();

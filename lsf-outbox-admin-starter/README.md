@@ -42,6 +42,7 @@ lsf:
 - `topic`
 - `msgKey`
 - `eventType`
+- `correlationId`
 - `from`
 - `to`
 - `limit`
