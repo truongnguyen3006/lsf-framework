@@ -26,7 +26,8 @@
 Từ root repo:
 
 ```bash
-cd D:\IdeaProjects\lsf-parent
+git clone https://github.com/truongnguyen3006/lsf-framework.git
+cd lsf-framework
 mvn -pl lsf-example -am spring-boot:run
 ```
 
@@ -111,4 +112,4 @@ lsf-example/
 
 - Đây là demo framework, không phải service production.
 - Nếu Kafka/Redis/MySQL chưa chạy, một số endpoint hoặc profile sẽ lỗi.
-- Với consumer thực tế hơn, xem thêm `D:\IdeaProjects\ecommerce-backend`.
+- Với consumer thực tế hơn, xem thêm [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git).

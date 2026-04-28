@@ -12,7 +12,7 @@ Tài liệu này audit toàn bộ reactor modules hiện có trong `lsf-parent` 
 
 - Bằng chứng từ source code hiện có trong repo.
 - Độ phủ test và module README hiện có.
-- Mức độ được dùng trong local compatibility checkpoint với `D:\IdeaProjects\ecommerce-backend`.
+- Mức độ được dùng trong consumer evidence tại [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git).
 - Mức độ framework có thể bảo vệ public contract mà không overclaim production completeness.
 
 ## Stable
@@ -25,7 +25,7 @@ Tài liệu này audit toàn bộ reactor modules hiện có trong `lsf-parent` 
 | `lsf-observability-starter` | metrics/MDC/observation quanh event dispatch | có focused tests, có cross-module runtime evidence cho metadata/metrics/observation, và đang được consumer dùng | dùng khi service đã dùng `lsf-eventing-starter` và cần observability mức framework |
 | `lsf-outbox-core` | abstraction `OutboxWriter` và contract append event sau transaction | là lõi chung cho cả MySQL/PostgreSQL runtime, public surface nhỏ và rõ | dùng khi service cần dual-write mitigation; không dùng độc lập nếu chưa chọn runtime DB |
 | `lsf-outbox-mysql-starter` | MySQL outbox writer + publisher poller | là durable publish path đang gần nhất với use case ecommerce hiện tại; có tests và đang nằm trong compatibility checkpoint | dùng khi service chạy MySQL và cần publish event sau transaction database |
-| `lsf-quota-streams-starter` | reserve / confirm / release cho tài nguyên hữu hạn | có runtime thật, có test, và đã đi qua compatibility checkpoint ở consumer inventory flow | dùng khi service có concern quota / oversell / reservation; không cần tự dựng quota engine riêng trước khi vượt quá capability hiện tại |
+| `lsf-quota-starter` | reserve / confirm / release cho tài nguyên hữu hạn | có runtime thật, có test, và đã đi qua compatibility checkpoint ở consumer inventory flow | dùng khi service có concern quota / oversell / reservation; không cần tự dựng quota engine riêng trước khi vượt quá capability hiện tại |
 
 ## Partial Support
 
@@ -69,18 +69,18 @@ Nhóm asset này nên được hiểu là `scaffold`, không phải tuyên bố 
 - Kafka admin và outbox admin vẫn được giữ ở `partial support`, nhưng evidence test cho hai module này đã tăng rõ rệt nhờ broker-backed và vendor-specific regression mới.
 - Example, template và ops assets là adoption aids; chúng quan trọng cho Phase 1 nhưng không nên bị diễn giải thành runtime promises.
 
-## Saga evidence update
+## Cập nhật bằng chứng saga
 
-- `lsf-saga-starter` stays in `partial support`.
-- Consumer evidence from `D:\IdeaProjects\ecommerce-backend` increased confidence in:
+- `lsf-saga-starter` vẫn ở mức `partial support`.
+- Bằng chứng từ consumer [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git) tăng độ tin cậy cho:
   - sequential success and compensation flows
   - timeout handling
   - duplicate and late reply handling
   - JDBC-backed resume of a persisted waiting saga
   - a narrow public helper for local reply fan-in before the saga advances
-- The same evidence also confirms the current limit:
+- Cùng bằng chứng đó cũng xác nhận giới hạn hiện tại:
   - multi-SKU fan-out/join is still best handled by a local consumer adapter, not by expanding the starter into a general workflow engine
-- Because of that limit, and because outbox-backed saga transport is still not the best-proven runtime path, maturity does not move to `stable` in this phase.
+- Vì giới hạn này, và vì outbox-backed saga transport chưa phải runtime path có bằng chứng mạnh nhất, maturity chưa được nâng lên `stable` trong phase này.
 
 ## Owner Decisions Needed
 

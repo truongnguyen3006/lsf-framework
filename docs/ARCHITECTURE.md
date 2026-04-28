@@ -284,7 +284,7 @@ Reliable publishing
     -> Kafka
 
 Coordination
-  lsf-quota-streams-starter
+  lsf-quota-starter
   lsf-saga-starter
 
 Operations

@@ -2,7 +2,7 @@
 
 > Framework Java/Spring Boot dạng multi-module, được xây dựng để chuẩn hóa các phần hạ tầng thường lặp lại trong hệ thống microservices: Kafka/eventing, outbox, quota/reservation, saga orchestration, sync HTTP, security, discovery, resilience và observability.
 
-LSF là framework phục vụ đồ án/luận văn và được kiểm chứng một phần qua hệ thống ecommerce consumer nằm ở repo `ecommerce-backend` trong cùng workspace. Ecommerce chỉ là case study để chứng minh khả năng áp dụng; các module của LSF có thể dùng cho nhiều hệ microservices khác có nhu cầu eventing, reliable publishing, quota/reservation, workflow và observability. Dự án này không hướng đến việc thay thế Spring Cloud, Kubernetes hay các nền tảng vận hành production; mục tiêu chính là gom các pattern hạ tầng có thể tái sử dụng để service mới tập trung nhiều hơn vào business logic.
+LSF là framework phục vụ đồ án/luận văn và được kiểm chứng một phần qua hệ thống ecommerce consumer tại [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git). Ecommerce chỉ là case study để chứng minh khả năng áp dụng; các module của LSF có thể dùng cho nhiều hệ microservices khác có nhu cầu eventing, reliable publishing, quota/reservation, workflow và observability. Dự án này không hướng đến việc thay thế Spring Cloud, Kubernetes hay các nền tảng vận hành production; mục tiêu chính là gom các pattern hạ tầng có thể tái sử dụng để service mới tập trung nhiều hơn vào business logic.
 
 > **Lưu ý về mức trưởng thành:** Không phải tất cả module đều có cùng mức độ hoàn thiện. Các module được kiểm chứng rõ nhất qua consumer hiện tại là Kafka/eventing, observability, outbox MySQL, quota/reservation và saga checkout. Một số module khác mới dừng ở mức cung cấp nền tảng ban đầu; nên đọc thêm [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md) trước khi áp dụng cho hệ thống thật.
 
@@ -13,7 +13,7 @@ LSF là framework phục vụ đồ án/luận văn và được kiểm chứng 
 | Hiểu LSF là gì và dùng cho ai | Phần giới thiệu, [Dành cho ai?](#dành-cho-ai), [Kiến trúc tổng quan](#kiến-trúc-tổng-quan) |
 | Chọn module phù hợp | [Chọn module theo nhu cầu](#chọn-module-theo-nhu-cầu), [Module trong repository](#module-trong-repository) |
 | Cài đặt và chạy source | [Cài đặt và chạy](#cài-đặt-và-chạy), [Database, migration và seed](#database-migration-và-seed) |
-| Demo hoặc bảo vệ luận văn | [Kiểm chứng qua consumer](#kiểm-chứng-qua-consumer), [Trạng thái hoàn thành](#trạng-thái-hoàn-thành) |
+| Demo hoặc bảo vệ luận văn | [Ví dụ hệ tích hợp](#ví-dụ-hệ-tích-hợp), [Trạng thái hoàn thành](#trạng-thái-hoàn-thành) |
 | Phát triển hoặc mở rộng framework | [Cấu trúc thư mục](#cấu-trúc-thư-mục), [Dùng LSF trong service khác](#dùng-lsf-trong-service-khác), [Lỗi phổ biến khi chạy và cách sửa](#lỗi-phổ-biến-khi-chạy-và-cách-sửa) |
 
 ## Dành cho ai?
@@ -116,9 +116,11 @@ Một service không cần dùng tất cả module. Ví dụ:
 - Service cần publish event chắc chắn sau transaction: thêm `lsf-outbox-core` và một runtime outbox.
 - Service cần REST nội bộ: dùng `lsf-service-web-starter`, `lsf-http-client-starter`, `lsf-discovery-starter`, `lsf-resilience-starter`.
 
-## Kiểm chứng qua consumer
+## Ví dụ hệ tích hợp
 
-Repository này chỉ chứa framework và các starter tái sử dụng, nên không đặt ảnh kịch bản nghiệp vụ trực tiếp trong README của LSF. Các ảnh minh họa checkout flow, saga console, reservation chống oversell, outbox và JMeter được đặt ở README của consumer `ecommerce-backend`, vì đó là nơi thể hiện LSF khi áp dụng vào một hệ thống chạy thật.
+Repository này chỉ chứa framework và các starter tái sử dụng, nên không đặt ảnh kịch bản nghiệp vụ trực tiếp trong README của LSF. Hệ tích hợp minh họa nằm ở [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git); giao diện demo và màn hình bằng chứng nằm ở [lsf-ecommerce-frontend](https://github.com/truongnguyen3006/lsf-ecommerce-frontend.git).
+
+Các ảnh minh họa checkout flow, saga console, reservation chống oversell, outbox và JMeter được đặt ở README của backend consumer, vì đó là nơi thể hiện LSF khi áp dụng vào một hệ thống chạy thật.
 
 ## Cấu trúc thư mục
 
@@ -154,7 +156,8 @@ Dòng `Java version` cần là `21.x`; repo có Maven Enforcer để fail fast n
 ### Build và verify toàn bộ framework
 
 ```bash
-cd <workspace>/lsf-parent
+git clone https://github.com/truongnguyen3006/lsf-framework.git
+cd lsf-framework
 mvn clean verify
 ```
 
@@ -296,7 +299,7 @@ Chỉ cần mở khi nâng cấp hoặc chuẩn bị phát hành:
 | `LSF framework must be built with JDK 21` | Maven đang chạy bằng JDK khác 21 | Kiểm tra `mvn -version`, đổi `JAVA_HOME` sang JDK 21 rồi chạy lại |
 | Không resolve được dependency Confluent | Maven chưa đọc repository `https://packages.confluent.io/maven/` hoặc mạng/proxy chặn | Kiểm tra mạng, proxy Maven, rồi chạy `mvn -U clean install` |
 | Testcontainers fail hoặc treo khi chạy test | Docker Desktop chưa chạy hoặc không đủ quyền truy cập Docker daemon | Mở Docker Desktop, kiểm tra `docker ps`, sau đó chạy lại test |
-| `ecommerce-backend` không tìm thấy `com.myorg.lsf:*:1.0-SNAPSHOT` | Framework chưa được install vào local Maven repo | Chạy `mvn clean install` trong `<workspace>/lsf-parent` trước |
+| `ecommerce-backend` không tìm thấy `com.myorg.lsf:*:1.0-SNAPSHOT` | Framework chưa được install vào local Maven repo | Chạy `mvn clean install` trong thư mục `lsf-framework` trước |
 | `docker compose` báo port đã được dùng | Kafka/MySQL/Redis/Zipkin hoặc service cũ đang chiếm port | Dừng container/process cũ bằng Docker Desktop hoặc đổi port trong compose |
 | `lsf-example` không kết nối được Kafka/Redis/MySQL | Hạ tầng demo chưa chạy hoặc profile chưa đúng | Chạy `docker compose up -d kafka schema-registry mysql redis zipkin`, rồi chạy app với profile phù hợp |
 

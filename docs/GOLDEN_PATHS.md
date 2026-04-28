@@ -69,7 +69,7 @@ Tài liệu này định nghĩa các đường áp dụng được khuyến ngh�
 - `lsf-contracts`
 - `lsf-kafka-starter`
 - `lsf-observability-starter`
-- `lsf-quota-streams-starter`
+- `lsf-quota-starter`
 
 ### Guidance
 

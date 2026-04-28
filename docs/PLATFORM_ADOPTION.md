@@ -37,7 +37,7 @@ Adopter và Codex nên coi các điểm sau là contract nền:
 | event dispatch/publish API | `lsf-eventing-starter` | khi muốn dùng handler-style dispatch và `LsfPublisher` thay cho wiring Kafka ad hoc |
 | event observability | `lsf-observability-starter` | khi service đã dùng eventing và cần metrics/MDC/observation quanh dispatcher |
 | durable publish sau transaction | `lsf-outbox-core`, `lsf-outbox-mysql-starter`, `lsf-outbox-postgres-starter` | khi cần tránh dual-write giữa DB commit và event publish |
-| quota / reservation | `lsf-quota-streams-starter` | khi service có concern reserve-confirm-release cho tài nguyên hữu hạn |
+| quota / reservation | `lsf-quota-starter` | khi service có concern reserve-confirm-release cho tài nguyên hữu hạn |
 | sync HTTP ingress | `lsf-service-web-starter` | khi cần chuẩn hóa REST ingress, request context, error response |
 | sync HTTP egress | `lsf-http-client-starter` | khi muốn dùng declarative HTTP client theo service id |
 | discovery / config / resilience / security foundation | `lsf-discovery-starter`, `lsf-config-starter`, `lsf-resilience-starter`, `lsf-security-starter` | khi service cần foundation modules để hỗ trợ sync/runtime conventions |
@@ -143,29 +143,31 @@ Các phần dưới đây không nên được adopter coi là compatibility pro
 
 ## 8. Compatibility Note Với Consumer Ecommerce Hiện Tại
 
-Tại local checkpoint ngày `2026-04-07`, consumer repo `D:\IdeaProjects\ecommerce-backend` đã pass compatibility checkpoint với tập module LSF hiện dùng:
+Theo trạng thái code hiện tại, consumer repo [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git) đang dùng các module LSF sau:
 
 - `lsf-contracts`
 - `lsf-kafka-starter`
 - `lsf-eventing-starter`
 - `lsf-observability-starter`
-- `lsf-quota-streams-starter`
 - `lsf-outbox-mysql-starter`
 - `lsf-outbox-admin-starter`
+- `lsf-kafka-admin-starter`
+- `lsf-quota-starter`
+- `lsf-saga-starter`
 
-Điều này không đồng nghĩa toàn bộ module khác của LSF đã được consumer hiện tại xác thực.
+Điều này cho thấy các concern Kafka/eventing, observability, outbox MySQL, bằng chứng quản trị, quota/reservation và checkout saga đã có bằng chứng consumer rõ hơn. Tuy vậy, nó không đồng nghĩa toàn bộ module khác của LSF đã được consumer hiện tại xác thực.
 
-## Saga adoption note from consumer evidence
+## Ghi chú adoption saga từ consumer evidence
 
-- `lsf-saga-starter` should still be adopted as sequential orchestration first.
-- The current public contract now includes a narrow reply fan-in helper for consumer-owned adapters:
+- `lsf-saga-starter` vẫn nên được adoption trước như một cơ chế điều phối tuần tự.
+- Public contract hiện tại có thêm nhóm helper hẹp cho adapter do consumer sở hữu:
   - `SagaReplyFanInSession`
   - `SagaReplyFanInSignal`
   - `SagaReplyFanInUpdate`
   - `SagaReplyFanInSupport`
-- This helper is appropriate when one saga step needs to wait for many low-level downstream replies and collapse them into one order-level success or failure before the saga advances.
-- This does not change the non-goal: LSF saga is still not a general workflow engine for arbitrary branch/join graphs.
-- When a service can keep fan-out/fan-in local and only expose one order-level reply back to the saga, that is the preferred shape today.
+- Nhóm helper này phù hợp khi một saga step cần chờ nhiều downstream replies cấp thấp và gom lại thành một kết quả success/failure ở cấp order trước khi saga đi tiếp.
+- Điều này không thay đổi non-goal: LSF saga vẫn không phải workflow engine tổng quát cho mọi dạng branch/join graph.
+- Khi một service có thể giữ fan-out/fan-in ở nội bộ và chỉ trả một order-level reply về saga, đó là hướng được ưu tiên hiện tại.
 
 ## 9. Owner Decisions Needed
 

@@ -27,7 +27,8 @@ Module này không phải business service hoàn chỉnh. Nó là mẫu tham kh�
 Từ root repo:
 
 ```bash
-cd D:\IdeaProjects\lsf-parent
+git clone https://github.com/truongnguyen3006/lsf-framework.git
+cd lsf-framework
 mvn -pl lsf-service-template -am spring-boot:run
 ```
 

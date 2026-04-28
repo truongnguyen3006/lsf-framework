@@ -96,7 +96,7 @@ Path khuyến nghị:
 3. Chỉ bật publisher poller sau khi schema/table path đã xác nhận.
 4. Nếu cần tooling nội bộ, thêm `lsf-outbox-admin-starter` nhưng không mở public mặc định.
 
-### 3.6 Từ custom quota / reservation logic sang `lsf-quota-streams-starter`
+### 3.6 Từ custom quota / reservation logic sang `lsf-quota-starter`
 
 Áp dụng khi service đang:
 
@@ -145,7 +145,7 @@ Nếu workflow vượt các giới hạn trên, chưa nên migrate sang `lsf-sag
 3. `lsf-eventing-starter`
 4. `lsf-observability-starter`
 5. `lsf-outbox-core` + runtime DB phù hợp
-6. `lsf-quota-streams-starter` nếu service có reservation concern
+6. `lsf-quota-starter` nếu service có reservation concern
 7. sync HTTP stack nếu thật sự cần
 8. admin starters cho internal operations
 9. `lsf-saga-starter` chỉ sau khi owner duyệt use case

@@ -1,6 +1,6 @@
 # Quota -> Ecommerce Integration Playbook
 
-Tài liệu này mô tả cách gắn `lsf-quota-streams-starter` vào một flow ecommerce thật, đặc biệt cho các bài toán:
+Tài liệu này mô tả cách gắn `lsf-quota-starter` vào một flow ecommerce thật, đặc biệt cho các bài toán:
 
 - flash sale
 - inventory hold

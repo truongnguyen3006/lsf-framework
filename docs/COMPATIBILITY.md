@@ -36,60 +36,61 @@ LSF hiện chưa hứa:
 | `partial support` | có thể thay đổi khi docs / use case support thay đổi; adopter phải verify kỹ trên use case thật |
 | `experimental / scaffold` | không có promise compatibility ngoài việc vẫn phục vụ mục tiêu minh họa / bootstrap |
 
-## 4. Consumer `ecommerce-backend`: Current Checkpoint
+## 4. Consumer `ecommerce-backend`: Trạng thái hiện tại
 
-Tại local checkpoint ngày `2026-04-07`, repo `D:\IdeaProjects\ecommerce-backend` có baseline tương thích với framework hiện tại:
+Theo trạng thái code hiện tại, repo [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git) đang dùng baseline tương thích với framework:
 
 - Java 21
 - Spring Boot `3.5.7`
 - Spring Cloud `2025.0.0`
 - `lsf.version=1.0-SNAPSHOT`
 
-Các module LSF đang được consumer kéo vào root `dependencyManagement` hoặc service modules:
+Các module LSF đang được consumer kéo vào các service modules:
 
 - `lsf-contracts`
 - `lsf-kafka-starter`
 - `lsf-eventing-starter`
-- `lsf-quota-streams-starter`
+- `lsf-observability-starter`
 - `lsf-outbox-mysql-starter`
 - `lsf-outbox-admin-starter`
-- `lsf-observability-starter`
+- `lsf-kafka-admin-starter`
+- `lsf-quota-starter`
+- `lsf-saga-starter`
 
 Use cases consumer hiện đang chứng minh được:
 
 - event contract sharing
 - Kafka publish/consume conventions
-- event observability baseline
+- handler-style event dispatch và event observability baseline
 - quota / reservation path
 - MySQL outbox path
-- internal outbox admin dependency wiring
+- internal outbox admin và Kafka/DLQ admin path
+- checkout saga dùng direct transport và JDBC store
 
-## 5. Những gì checkpoint với `ecommerce-backend` chưa chứng minh
+## 5. Những gì consumer `ecommerce-backend` chưa chứng minh
 
-Checkpoint hiện tại chưa nên được hiểu là xác nhận cho các module sau:
+Consumer hiện tại chưa nên được hiểu là xác nhận rộng cho các module/use case sau:
 
 - `lsf-config-starter`
 - `lsf-discovery-starter`
 - `lsf-gateway-starter`
 - `lsf-http-client-starter`
-- `lsf-kafka-admin-starter`
 - `lsf-outbox-postgres-starter`
 - `lsf-resilience-starter`
-- `lsf-saga-starter`
 - `lsf-security-starter`
 - `lsf-service-web-starter`
 
 Nó cũng chưa xác nhận:
 
-- gateway path;
-- sync HTTP path trọn bộ;
+- sync HTTP stack trọn bộ trong ecommerce consumer;
 - PostgreSQL outbox path;
-- saga/orchestration path;
-- blanket compatibility của admin endpoints trong production topology.
+- workflow engine tổng quát ngoài checkout saga tuần tự hiện tại;
+- blanket compatibility của admin endpoints trong production topology;
+- deployment/operations production ngoài môi trường local demo.
 
-## 6. Guidance Cho Consumer Hiện Tại
+## 6. Guidance cho consumer hiện tại
 
-Đối với `D:\IdeaProjects\ecommerce-backend`, guidance an toàn hiện tại là:
+Đối với [lsf-ecommerce-backend](https://github.com/truongnguyen3006/lsf-ecommerce-backend.git), guidance an toàn hiện tại là:
 
 - tiếp tục dùng tập module đã qua checkpoint cho các concern tương ứng;
 - không tự động mở rộng sang partial modules nếu chưa có focused validation riêng;
