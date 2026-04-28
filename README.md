@@ -2,9 +2,9 @@
 
 > Framework Java/Spring Boot dạng multi-module, được xây dựng để chuẩn hóa các phần hạ tầng thường lặp lại trong hệ thống microservices: Kafka/eventing, outbox, quota/reservation, saga orchestration, sync HTTP, security, discovery, resilience và observability.
 
-LSF là framework phục vụ đồ án/luận văn và được kiểm chứng một phần qua hệ thống ecommerce consumer nằm ở repo `ecommerce-backend` trong cùng workspace. Ecommerce chỉ là case study để chứng minh khả năng áp dụng; các module của LSF có thể dùng cho nhiều hệ microservices khác có nhu cầu eventing, reliable publishing, quota/reservation, workflow và observability. Dự án này không cố thay thế toàn bộ Spring Cloud, Kubernetes hay các nền tảng vận hành production; mục tiêu chính là gom các pattern hạ tầng có thể tái sử dụng để service mới tập trung nhiều hơn vào business logic.
+LSF là framework phục vụ đồ án/luận văn và được kiểm chứng một phần qua hệ thống ecommerce consumer nằm ở repo `ecommerce-backend` trong cùng workspace. Ecommerce chỉ là case study để chứng minh khả năng áp dụng; các module của LSF có thể dùng cho nhiều hệ microservices khác có nhu cầu eventing, reliable publishing, quota/reservation, workflow và observability. Dự án này không hướng đến việc thay thế Spring Cloud, Kubernetes hay các nền tảng vận hành production; mục tiêu chính là gom các pattern hạ tầng có thể tái sử dụng để service mới tập trung nhiều hơn vào business logic.
 
-> **Lưu ý về mức trưởng thành:** Không phải tất cả module đều có cùng mức độ hoàn thiện. Các module được kiểm chứng rõ nhất qua consumer hiện tại là Kafka/eventing, observability, outbox MySQL, quota/reservation và saga checkout. Một số module khác đang ở mức starter/baseline; nên đọc thêm [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md) trước khi áp dụng cho hệ thống thật.
+> **Lưu ý về mức trưởng thành:** Không phải tất cả module đều có cùng mức độ hoàn thiện. Các module được kiểm chứng rõ nhất qua consumer hiện tại là Kafka/eventing, observability, outbox MySQL, quota/reservation và saga checkout. Một số module khác mới dừng ở mức cung cấp nền tảng ban đầu; nên đọc thêm [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md) trước khi áp dụng cho hệ thống thật.
 
 ## Đọc nhanh
 
@@ -52,7 +52,7 @@ LSF là framework phục vụ đồ án/luận văn và được kiểm chứng 
 | Module | Vai trò | Khi nào dùng? | README |
 |---|---|---|---|
 | `lsf-contracts` | Shared contracts như `EventEnvelope`, headers, request/trace context, quota commands và `LsfErrorResponse` | Khi nhiều service cần thống nhất contract | [README](lsf-contracts/README.md) |
-| `lsf-kafka-starter` | Kafka producer/consumer defaults, retry, DLQ, serializer/deserializer baseline | Service publish/consume Kafka | [README](lsf-kafka-starter/README.md) |
+| `lsf-kafka-starter` | Kafka producer/consumer defaults, retry, DLQ, serializer/deserializer nền tảng | Service publish/consume Kafka | [README](lsf-kafka-starter/README.md) |
 | `lsf-eventing-starter` | Handler registry, `@LsfEventHandler`, envelope listener, publisher API và idempotency | Service muốn xử lý event theo handler thay vì tự route trong listener | [README](lsf-eventing-starter/README.md) |
 | `lsf-observability-starter` | MDC, metrics và observation wrapper quanh dispatcher | Service cần theo dõi async event handling | [README](lsf-observability-starter/README.md) |
 | `lsf-outbox-core` | Abstraction chung cho outbox writer và SQL helper | Module nền cho runtime outbox | [README](lsf-outbox-core/README.md) |
@@ -67,7 +67,7 @@ LSF là framework phục vụ đồ án/luận văn và được kiểm chứng 
 | `lsf-config-starter` | Convention cho config import local/config server | Service cần bootstrap cấu hình tập trung | [README](lsf-config-starter/README.md) |
 | `lsf-discovery-starter` | `LsfServiceLocator`, static discovery và bridge tới Spring `DiscoveryClient` | Local/dev/test discovery hoặc abstraction cho HTTP client | [README](lsf-discovery-starter/README.md) |
 | `lsf-gateway-starter` | Spring Cloud Gateway conventions và correlation headers | Gateway muốn khai báo route theo convention LSF | [README](lsf-gateway-starter/README.md) |
-| `lsf-security-starter` | API key/JWT security baseline cho servlet service | Internal APIs hoặc admin endpoints cần bảo vệ nhanh | [README](lsf-security-starter/README.md) |
+| `lsf-security-starter` | Nền tảng bảo mật API key/JWT cho servlet service | Internal APIs hoặc admin endpoints cần bảo vệ nhanh | [README](lsf-security-starter/README.md) |
 | `lsf-resilience-starter` | Executor và policy resolver cho retry, circuit breaker, timeout, rate limit | Gọi downstream có rủi ro lỗi tạm thời | [README](lsf-resilience-starter/README.md) |
 | `lsf-service-template` | Service scaffold dùng các starter LSF | Bắt đầu service mới theo chuẩn framework | [README](lsf-service-template/README.md) |
 | `lsf-example` | Demo application cho eventing, outbox, quota và flash-sale flow | Học nhanh cách các module phối hợp | [README](lsf-example/README.md) |
@@ -88,7 +88,7 @@ flowchart LR
     eventing --> kafka[lsf-kafka-starter]
     service --> outbox["lsf-outbox-core + lsf-outbox-&lt;db&gt;-starter"]
     service --> observability[lsf-observability-starter]
-    outbox --> ops[Outbox/Admin evidence]
+    outbox --> ops[Bằng chứng Outbox/Admin]
     kafka --> kafkaAdmin[lsf-kafka-admin-starter]
 ```
 
@@ -131,7 +131,7 @@ lsf-parent/
 ├─ lsf-outbox-core/              # Core outbox abstraction
 ├─ lsf-service-template/         # Scaffold service mới
 ├─ lsf-example/                  # Demo application
-├─ docker-compose.yml            # Infra/demo baseline
+├─ docker-compose.yml            # Hạ tầng demo nền tảng
 └─ pom.xml                       # Maven parent và dependency management
 ```
 
@@ -305,15 +305,15 @@ Chỉ cần mở khi nâng cấp hoặc chuẩn bị phát hành:
 | Nhóm | Trạng thái |
 |---|---|
 | Kafka/eventing/observability | Đã có starter, focused tests và một số cross-module runtime tests |
-| Outbox MySQL | Đã được dùng trong consumer ecommerce, có migration/runtime evidence |
-| Outbox PostgreSQL | Có runtime module và test, mức consumer evidence thấp hơn MySQL |
+| Outbox MySQL | Đã được dùng trong consumer ecommerce, có migration và bằng chứng vận hành |
+| Outbox PostgreSQL | Có runtime module và test, mức bằng chứng từ consumer thấp hơn MySQL |
 | Quota/reservation | Được áp dụng rõ trong `inventory-service` của ecommerce consumer |
 | Saga | Có runtime hữu ích cho flow tuần tự và demo default-on trong consumer, vẫn nên xem là partial support |
-| Gateway/config/discovery/security/resilience/sync HTTP | Starter-level support, phù hợp làm baseline hơn là platform hoàn chỉnh |
+| Gateway/config/discovery/security/resilience/sync HTTP | Hỗ trợ ở mức nền tảng ban đầu, phù hợp để mở rộng tiếp thay vì xem như một platform hoàn chỉnh |
 
 ## Lưu ý quan trọng
 
-- Không phải mọi module đều production-ready ở cùng mức. Xem thêm [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md).
+- Không phải mọi module đều sẵn sàng cho môi trường production ở cùng mức. Xem thêm [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md).
 - Một số test dùng Docker/Testcontainers hoặc broker/database thật, nên cần hạ tầng local phù hợp.
 - Consumer dùng `1.0-SNAPSHOT` cần chạy `mvn clean install` ở repo này trước.
 - Không nên expose admin endpoints như outbox/kafka admin ra internet công khai.
