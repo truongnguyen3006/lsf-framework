@@ -1,12 +1,15 @@
 # lsf-http-client-starter
 
-Starter này cung cấp `RestClient` + service discovery conventions cho synchronous HTTP trong LSF.
+> Starter tạo HTTP client nội bộ trên Spring `RestClient`, có discovery, resilience và auth/context propagation.
 
-## Mục tiêu
+Module này giúp service gọi downstream REST API bằng interface có annotation, thay vì tự dựng URL, header, retry và error handling ở từng nơi.
 
-- chuẩn hóa cách gọi HTTP nội bộ giữa các service ngoài Kafka
-- tái sử dụng `LsfServiceLocator`, `LsfResilienceExecutor` và request/trace conventions đã có
-- giảm boilerplate khi team phải tự dựng proxy client, auth và header propagation ở từng service
+## Dùng khi nào?
+
+- Service cần gọi REST tới service khác trong cùng hệ microservices.
+- Muốn dùng `serviceId` thay vì hard-code host/port.
+- Muốn propagate trace/request headers và auth token/API key.
+- Muốn áp dụng resilience policy theo từng client.
 
 ## Dependency
 
@@ -14,101 +17,73 @@ Starter này cung cấp `RestClient` + service discovery conventions cho synchro
 <dependency>
   <groupId>com.myorg.lsf</groupId>
   <artifactId>lsf-http-client-starter</artifactId>
-  <version>${lsf.version}</version>
 </dependency>
 ```
 
-## Những gì starter đang hỗ trợ
+## Khai báo client
 
-- `@LsfHttpClient` + `@EnableLsfHttpClients`
-- build proxy client dựa trên Spring `@HttpExchange`
-- resolve endpoint qua `LsfServiceLocator`
-- propagate:
-  - `correlation-id`
-  - `causation-id`
-  - `request-id`
-  - trace headers như `traceparent`, `tracestate`, `b3`, `x-b3-*`
-- internal auth:
-  - `API_KEY`
-  - `BEARER`
-  - `AUTO`
-- remote error decode về `LsfErrorResponse`
-- retryable/non-retryable classification tương thích với `lsf-resilience-starter`
+```java
+@EnableLsfHttpClients(basePackages = "com.example.clients")
+@SpringBootApplication
+class OrderApplication {
+}
+```
 
-## Cấu hình cơ bản
+```java
+@LsfHttpClient(
+    serviceId = "inventory-service",
+    pathPrefix = "/api/inventory",
+    resilienceId = "inventory-client"
+)
+public interface InventoryClient {
+
+    @GetExchange("/{sku}/availability")
+    InventoryAvailabilityResponse availability(@PathVariable String sku);
+}
+```
+
+## Cấu hình mẫu
 
 ```yaml
 lsf:
+  http:
+    client:
+      enabled: true
+      connect-timeout: 1s
+      read-timeout: 2s
+      authentication:
+        mode: AUTO
+        api-key:
+          header-name: X-API-Key
+          value: local-dev-secret
   discovery:
     mode: STATIC
     services:
       inventory-service:
         - host: localhost
-          port: 8081
-          scheme: http
-
-  http:
-    client:
-      connect-timeout: 1s
-      read-timeout: 2s
-      authentication:
-        mode: API_KEY
-        api-key:
-          value: local-dev-key
-
+          port: 8082
   resilience:
     instances:
-      inventory-http:
+      inventory-client:
         retry:
           enabled: true
-          max-attempts: 3
-          wait-duration: 200ms
-        timeout:
-          enabled: true
-          duration: 2s
+          max-attempts: 2
 ```
 
-## Ví dụ khai báo client
+## Thành phần chính
 
-```java
-@EnableLsfHttpClients(basePackageClasses = InventoryHttpClient.class)
-@Configuration
-class SyncClientConfiguration {
-}
+| Class/annotation | Vai trò |
+|---|---|
+| `@EnableLsfHttpClients` | Scan và đăng ký client interfaces |
+| `@LsfHttpClient` | Khai báo `serviceId`, `pathPrefix`, `resilienceId`, `authMode` |
+| `LsfHttpServiceClientFactory` | Tạo proxy client |
+| `LsfServiceUriBuilderFactory` | Resolve base URI từ discovery |
+| `LsfRemoteServiceException` | Chuẩn hóa lỗi từ downstream |
+| `LsfRequestContextPropagationInterceptor` | Propagate request context |
+| `LsfAuthenticationInterceptor` | Propagate API key/bearer token |
 
-@LsfHttpClient(
-        serviceId = "inventory-service",
-        pathPrefix = "/internal",
-        resilienceId = "inventory-http",
-        authMode = LsfClientAuthMode.API_KEY
-)
-@HttpExchange
-public interface InventoryHttpClient {
+## Lưu ý
 
-    @GetExchange("/health")
-    InventoryHealthResponse health();
-}
-```
-
-## Ghi chú thiết kế
-
-- Module này bám theo Spring HTTP service proxy thay vì tạo một DSL hoàn toàn mới.
-- `LsfRemoteServiceException` giữ lại retryability để `LsfResilienceExecutor` biết lúc nào không nên retry nữa.
-- Authentication hiện ưu tiên rõ ràng cho internal service-to-service calls, không cố giải quyết mọi mô hình IAM.
-
-## Validation hiện có
-
-- focused tests cho header propagation, trace propagation, auth interceptor và remote error classification
-- auto-configuration test cho `@EnableLsfHttpClients`
-- cross-module runtime integration test với `lsf-service-web-starter` + `lsf-security-starter` + `lsf-resilience-starter` để verify:
-  - gọi thật qua servlet HTTP path
-  - API key auth
-  - propagate `correlation-id`, `causation-id`, `request-id` và `traceparent`
-  - decode `LsfErrorResponse`
-  - retry retryable response và dừng ở non-retryable response
-
-## Giới hạn hiện tại
-
-- chưa có reactive HTTP client/runtime tương đương
-- chưa có OAuth2 client-credentials flow hoàn chỉnh
-- chưa có gRPC convention/runtime đi kèm
+- Module này dùng servlet `RestClient`, chưa phải WebClient/reactive client đầy đủ.
+- Downstream nên dùng `lsf-service-web-starter` để error response decode nhất quán.
+- Retry chỉ an toàn khi API downstream idempotent hoặc có idempotency key.

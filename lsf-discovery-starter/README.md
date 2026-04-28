@@ -1,53 +1,72 @@
 # lsf-discovery-starter
 
-Starter này bổ sung service discovery support ở mức framework theo hướng thực dụng: tận dụng discovery runtime có sẵn nếu môi trường đã có, hoặc cho phép static discovery để chạy local/dev/test.
+> Starter cung cấp `LsfServiceLocator` để service và HTTP client tìm downstream service theo một API thống nhất.
 
-## Mục tiêu
+Module này có hai hướng dùng chính: tận dụng Spring `DiscoveryClient` nếu môi trường đã có Eureka/Consul/Kubernetes discovery, hoặc dùng static discovery cho local/dev/test.
 
-- cung cấp `LsfServiceLocator` như API ổn định cho các module khác của framework
-- hỗ trợ static registry local mà không phải dựng discovery server riêng
-- fail-fast khi service khai báo discovery là bắt buộc nhưng runtime không đáp ứng
+## Dùng khi nào?
 
-## Những gì starter đang hỗ trợ
+- Service cần gọi downstream bằng `serviceId` thay vì hard-code URL.
+- Local/test chưa muốn dựng discovery server đầy đủ.
+- Module khác như `lsf-http-client-starter` cần một abstraction ổn định để resolve service URI.
 
-- `lsf.discovery.mode=AUTO|STATIC|REQUIRED|DISABLED`
-- static service registry qua `lsf.discovery.services.<service-id>[]`
-- `DiscoveryClient` và `ReactiveDiscoveryClient` cho chế độ static
-- reuse `DiscoveryClient` hiện có nếu môi trường đã cung cấp một implementation khác
+## Dependency
 
-## Cấu hình ví dụ
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-discovery-starter</artifactId>
+</dependency>
+```
+
+## Cấu hình static discovery
 
 ```yaml
 lsf:
   discovery:
+    enabled: true
     mode: STATIC
     services:
       inventory-service:
         - host: localhost
-          port: 8081
-          scheme: http
-      order-service:
-        - host: localhost
           port: 8082
-          scheme: http
-          context-path: /internal
+          secure: false
+      payment-service:
+        - host: localhost
+          port: 8089
+          context-path: /api
 ```
 
-## Cách adopter dùng starter
+## Thuộc tính chính
 
-- Dùng `AUTO` khi muốn framework ưu tiên discovery runtime sẵn có, nhưng vẫn có thể fallback static nếu cấu hình local instances.
-- Dùng `STATIC` cho local/dev/test hoặc cho hệ nhỏ chưa có registry riêng.
-- Dùng `REQUIRED` khi service chỉ hợp lệ nếu có discovery runtime thực sự.
-- Dùng `LsfServiceLocator` trong service code hoặc starter khác để resolve `ServiceInstance` hay URI bắt buộc.
+| Property | Ý nghĩa | Mặc định |
+|---|---|---|
+| `lsf.discovery.enabled` | Bật discovery support | `true` |
+| `lsf.discovery.mode` | `AUTO`, `STATIC`, `REQUIRED` hoặc `DISABLED` | `AUTO` |
+| `lsf.discovery.services` | Danh sách service instance tĩnh | rỗng |
 
-## Ghi chú thiết kế
+## API chính
 
-- Static instances hiện dùng các trường `host`, `port`, `secure`, `scheme`, `context-path`, `metadata`.
-- Starter này không tự tạo registry server.
-- `lsf-http-client-starter` dùng lại `LsfServiceLocator` để build sync HTTP clients.
+```java
+URI uri = serviceLocator.resolve("inventory-service")
+    .orElseThrow();
+```
 
-## Giới hạn hiện tại
+`LsfServiceLocator` được dùng nội bộ bởi `lsf-http-client-starter`, nhưng service application cũng có thể inject trực tiếp nếu cần.
 
-- chưa có client-side load balancing strategy riêng ngoài behavior của client sử dụng nó
-- chưa có health-aware instance filtering
-- chưa có discovery-to-gateway route generation tự động
+## Cấu trúc module
+
+```text
+lsf-discovery-starter/
+├─ LsfDiscoveryAutoConfiguration.java
+├─ LsfDiscoveryProperties.java
+├─ LsfServiceLocator.java
+├─ LsfStaticDiscoveryClient.java
+└─ LsfStaticReactiveDiscoveryClient.java
+```
+
+## Lưu ý
+
+- Module này không thay thế Eureka/Kubernetes discovery; nó là lớp convention/adapter.
+- Với production, nên dùng discovery runtime thật và cấu hình health check phù hợp.
+- Static discovery rất hữu ích cho integration test và demo local.

@@ -1,187 +1,127 @@
-# Phase 6 Deployment Guide
+# LSF Deployment Baseline
 
-Tài liệu này mô tả baseline CI/CD và deployment được bổ sung ở Phase 6 cho LSF.
+> CI/CD, Docker Compose và Helm skeleton để đóng gói/chạy thử service dùng LSF.
 
-Mục tiêu của phase này là chứng minh framework không chỉ dừng ở mức source modules, mà còn có đường dẫn khả thi để:
+Các artifact trong thư mục này chứng minh framework có đường đi từ source code tới container và manifest triển khai cơ bản. Đây là baseline để tham khảo, không phải blueprint production hoàn chỉnh cho mọi tổ chức.
 
-- verify build trong CI
-- đóng gói artifact phục vụ release candidate
-- build container image cho app mẫu/scaffold
-- cung cấp skeleton triển khai Kubernetes/Helm cho adopter
+## Artifact chính
 
-## 1. Maturity level của artifact
+| Artifact | Vai trò | Trạng thái |
+|---|---|---|
+| `.github/workflows/ci.yml` | Maven verify, validate compose/chart, sanity build Docker image | Dùng được cho repo hiện tại |
+| `.github/workflows/release-candidate.yml` | Đóng gói JAR, Helm chart và image tarball | Release candidate skeleton |
+| `lsf-example/Dockerfile` | Image tham khảo cho demo app | Runnable reference |
+| `lsf-service-template/Dockerfile` | Dockerfile mẫu cho adopter | Copy/adapt baseline |
+| `docker-compose.yml` | Local/dev stack | Kafka, Schema Registry, MySQL, Redis, Zipkin, apps profile |
+| `ops/deployment/helm/lsf-service` | Helm chart generic cho Spring Boot service | Skeleton |
 
-- `.github/workflows/ci.yml`
-  - maturity: dùng được ngay cho repository hiện tại
-  - phạm vi: Maven verify, validate compose/chart, build sanity cho Docker image
+## Validate deployment artifacts
 
-- `.github/workflows/release-candidate.yml`
-  - maturity: release-candidate packaging skeleton
-  - phạm vi: package JARs, package Helm chart, export image tarballs thành GitHub artifacts
-  - giới hạn: chưa publish lên Maven repository hay container registry
-
-- `lsf-example/Dockerfile`
-  - maturity: runnable reference image cho app demo của repo
-
-- `lsf-service-template/Dockerfile`
-  - maturity: copy/adapt baseline cho adopter khi tạo service mới từ template
-
-- `docker-compose.yml`
-  - maturity: local/dev deployment baseline
-  - phạm vi: infra cốt lõi, profile chạy app mẫu, profile bật PostgreSQL nếu cần
-
-- `ops/deployment/helm/lsf-service`
-  - maturity: Helm skeleton ở mức framework
-  - phạm vi: `Deployment`, `Service`, `ServiceAccount`, `Ingress`, `HPA`, probe/resources/env defaults
-  - giới hạn: không tự quản secrets, GitOps, service mesh, topic provisioning, hay cloud load balancer tuning
-
-## 2. CI workflow hiện có
-
-### `CI`
-
-Workflow này chạy trên `push`, `pull_request`, và `workflow_dispatch`.
-
-Nó gồm 3 lane:
-
-1. `maven-verify`
-   - chạy `mvn -B -ntp verify`
-   - phù hợp để kiểm tra multi-module build hiện tại của repo
-
-2. `deployment-validation`
-   - chạy `docker compose config` cho compose gốc và monitoring compose
-   - chạy `helm lint` và `helm template` cho chart `ops/deployment/helm/lsf-service`
-
-3. `container-build`
-   - build image cho `lsf-example` và `lsf-service-template`
-   - mục đích là sanity-check Dockerfile, không push image
-
-### `Release Candidate`
-
-Workflow này chạy bằng `workflow_dispatch` hoặc khi push tag `v*`.
-
-Kết quả đầu ra:
-
-- Maven JAR artifacts
-- packaged Helm chart
-- `docker save` archives cho `lsf-example` và `lsf-service-template`
-
-Mục đích của workflow này là chứng minh repo có thể đi tới mức release-candidate packaging.
-Việc publish thật lên registry được giữ lại như bước sau, vì nó phụ thuộc vào secrets, naming convention, governance và release process của tổ chức sử dụng framework.
-
-## 3. Docker baseline
-
-### Local validation
+Từ root repo:
 
 ```powershell
 pwsh ./ops/deployment/validate.ps1
 ```
 
-Script trên:
+Script này kiểm tra:
 
-- validate root `docker-compose.yml`
-- validate monitoring compose ở `ops/monitoring`
-- lint/render Helm chart
+- root `docker-compose.yml`
+- monitoring compose
+- `helm lint`
+- `helm template`
 
-### Build image thủ công
+## Build Docker image thủ công
 
 ```bash
 docker build -f lsf-example/Dockerfile -t lsf-example:local .
 docker build -f lsf-service-template/Dockerfile -t lsf-service-template:local .
 ```
 
-### Chạy local stack bằng Docker Compose
+## Chạy local stack
+
+Chỉ infra nền:
+
+```bash
+docker compose up -d kafka schema-registry mysql redis zipkin
+```
+
+Infra + apps demo:
 
 ```bash
 docker compose --profile apps up --build
 ```
 
-Stack này sẽ bật:
-
-- Kafka
-- Schema Registry
-- MySQL
-- Redis
-- Zipkin
-- `lsf-example`
-- `template-service`
-
-Nếu cần PostgreSQL để tham khảo outbox runtime tương ứng:
+PostgreSQL tham khảo cho outbox runtime:
 
 ```bash
 docker compose --profile postgres up -d postgres
 ```
 
-## 4. Docker/Compose design notes
+## Helm skeleton
 
-- `lsf-example` dùng profile `docker,outbox-mysql`.
-- `lsf-service-template` dùng profile `docker` và mặc định trỏ `dependency-service` sang `http://lsf-example:8080`.
-- `.dockerignore` loại bỏ `.git`, IDE metadata và `target/` để giảm build context.
-- Dockerfile đều là multi-stage build bằng Maven + runtime JRE 21 và chạy bằng non-root user.
+Chart nằm ở:
 
-## 5. Helm skeleton cho adopter
+```text
+ops/deployment/helm/lsf-service
+```
 
-Chart `ops/deployment/helm/lsf-service` được thiết kế như baseline generic cho một service Spring Boot dùng LSF.
-
-Chart hiện hỗ trợ:
+Chart hỗ trợ:
 
 - `Deployment`
 - `Service`
 - optional `ServiceAccount`
 - optional `Ingress`
 - optional `HorizontalPodAutoscaler`
-- readiness/liveness/startup probes trỏ vào actuator health endpoints
-- baseline env vars cho `prometheus`, graceful shutdown, và Spring profile
+- readiness/liveness/startup probes qua Actuator
+- env/envFrom cho config và secrets
+- resource requests/limits
 
-### Ví dụ values file cho adopter
+Render chart:
+
+```bash
+helm template template-service ops/deployment/helm/lsf-service
+```
+
+Install/upgrade:
+
+```bash
+helm upgrade --install template-service ops/deployment/helm/lsf-service
+```
+
+Ví dụ values cho service thật:
 
 ```yaml
 image:
-  repository: ghcr.io/acme/customer-service
+  repository: ghcr.io/acme/order-service
   tag: 1.0.0
 
 spring:
   profiles: kubernetes,outbox-mysql
 
 env:
-  SPRING_APPLICATION_NAME: customer-service
+  SPRING_APPLICATION_NAME: order-service
   LSF_KAFKA_BOOTSTRAP_SERVERS: kafka.kafka.svc.cluster.local:9092
   LSF_SCHEMA_REGISTRY_URL: http://schema-registry.kafka.svc.cluster.local:8081
-  SPRING_DATASOURCE_URL: jdbc:mysql://mysql.database.svc.cluster.local:3306/customer_service?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-  SPRING_DATASOURCE_USERNAME: customer_service
+  SPRING_DATASOURCE_URL: jdbc:mysql://mysql.database.svc.cluster.local:3306/order_service
+  SPRING_DATASOURCE_USERNAME: order_service
 
 envFrom:
   secrets:
-    - customer-service-secrets
+    - order-service-secrets
 ```
 
-### Render hoặc cài chart
+## Cách adopter nên dùng
 
-```bash
-helm template customer-service ops/deployment/helm/lsf-service -f customer-service-values.yaml
-helm upgrade --install customer-service ops/deployment/helm/lsf-service -f customer-service-values.yaml
-```
+1. Bắt đầu từ `lsf-service-template`.
+2. Copy Dockerfile và đổi module path nếu service mới đổi tên.
+3. Chọn đúng profile/runtime outbox theo database.
+4. Dùng Helm chart như skeleton, sau đó override image, env, secret, ingress và resource.
+5. Khóa các admin endpoints như Kafka/outbox admin bằng network/internal auth.
 
-## 6. Cách adopter nên dùng các artifact này
+## Giới hạn hiện tại
 
-1. Bắt đầu từ `lsf-service-template` khi tạo service mới.
-2. Copy `Dockerfile` của template và đổi module path trong lệnh Maven nếu module mới đã đổi tên.
-3. Chọn đúng profile/outbox runtime theo database thật của service.
-4. Dùng chart Helm như skeleton, rồi override image, env, secrets, resources, ingress theo môi trường của tổ chức.
-5. Giữ các endpoint admin nội bộ như DLQ/outbox admin phía sau auth hoặc internal network.
-
-## 7. Build/release guidance
-
-- Dùng `CI` workflow cho mọi pull request và nhánh tích hợp.
-- Dùng `Release Candidate` workflow để tạo package reviewable trước khi publish.
-- Nếu sau này cần publish thật:
-  - thêm credentials cho Maven repository hoặc GHCR/registry tương ứng
-  - thay bước `upload-artifact` bằng `mvn deploy` và `docker push`
-  - tách riêng release governance như changelog, signed tags, hay approval gates nếu tổ chức yêu cầu
-
-## 8. Những gì Phase 6 cố ý chưa làm
-
-- chưa thêm GitOps manifests cho Argo CD/Flux
-- chưa publish image thật lên registry
-- chưa tự provision Kafka topics, Schema Registry subjects, database, secret stores
-- chưa thêm cloud-specific chart cho EKS/GKE/AKS
-- chưa thêm Helm chart riêng cho từng module library vì các starter của LSF chủ yếu là library, không phải runtime service độc lập
+- Chưa publish Maven artifact hoặc Docker image lên registry thật.
+- Chưa provision Kafka topics, database, secret store hoặc cloud load balancer.
+- Chưa có GitOps manifests cho Argo CD/Flux.
+- Chưa có cloud-specific tuning cho EKS/GKE/AKS.
+- Helm chart dành cho service Spring Boot adopter, không dành cho từng starter library.

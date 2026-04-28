@@ -1,6 +1,15 @@
 # lsf-kafka-starter
 
-Starter này chuẩn hóa Kafka producer/consumer defaults cho LSF và cung cấp retry/DLQ baseline ở mức framework.
+> Starter chuẩn hóa Kafka producer/consumer defaults, retry và DLQ cho các service LSF.
+
+Module này giúp service mới không phải tự bootstrap lại Kafka từ đầu. Các default được chọn theo hướng an toàn hơn cho hệ event-driven: producer idempotence, `acks=all`, retry có kiểm soát, consumer factory, listener container factory và DLQ recoverer.
+
+## Dùng khi nào?
+
+- Service publish hoặc consume Kafka messages.
+- Muốn dùng chung Kafka defaults giữa nhiều service.
+- Cần retry/DLQ baseline để lỗi không bị mất âm thầm.
+- Muốn dùng serializer/deserializer theo convention LSF.
 
 ## Dependency
 
@@ -8,70 +17,64 @@ Starter này chuẩn hóa Kafka producer/consumer defaults cho LSF và cung cấ
 <dependency>
   <groupId>com.myorg.lsf</groupId>
   <artifactId>lsf-kafka-starter</artifactId>
-  <version>${lsf.version}</version>
 </dependency>
 ```
 
-## Cấu hình tối thiểu
-
-```yaml
-lsf:
-  kafka:
-    bootstrap-servers: localhost:9092
-    consumer:
-      group-id: demo-group
-```
-
-## Những gì starter cung cấp
-
-- `KafkaTemplate`, producer factory và consumer factory với safe defaults
-- producer defaults như:
-  - `acks=all`
-  - `idempotence=true`
-  - retries, compression, linger, batch size
-- consumer defaults như:
-  - `auto-offset-reset`
-  - `max-poll-records`
-  - retry attempts và backoff
-  - concurrency
-- `DefaultErrorHandler` + `DeadLetterPublishingRecoverer`
-- DLQ support với suffix mặc định `.DLQ`
-- DLQ headers cho reason, exception class/message, original topic/partition/offset, service name và timestamp
-- metrics pre-register cho:
-  - `lsf.kafka.retry`
-  - `lsf.kafka.dlq`
-  - `lsf.kafka.recovery_failed`
-
-## Cấu hình ví dụ
+## Cấu hình mẫu
 
 ```yaml
 lsf:
   kafka:
     bootstrap-servers: localhost:9092
     schema-registry-url: http://localhost:8081
+    producer:
+      acks: all
+      idempotence: true
+      retries: 10
+      max-in-flight: 5
+      compression: snappy
+      linger-ms: 5
+      batch-size: 65536
     consumer:
       group-id: order-service
-      batch: true
-      concurrency: 4
-      max-poll-records: 500
+      auto-offset-reset: earliest
+      batch: false
+      concurrency: 2
+      max-poll-records: 200
       retry:
         attempts: 3
         backoff: 200ms
+      json-value-type: com.myorg.lsf.contracts.core.envelope.EventEnvelope
     dlq:
       enabled: true
       suffix: .DLQ
     observability:
       observation-enabled: true
-      warn-on-batch: true
 ```
 
-## Ghi chú thiết kế
+## Bean/runtime được cung cấp
 
-- Starter này cung cấp baseline Kafka runtime; business topics, payloads và handler logic vẫn thuộc về service adopter.
-- `LsfNonRetryableException`, deserialization errors và serialization errors được đánh dấu là không retry.
-- `LsfDlqReasonClassifier` cho phép phân loại lý do vào DLQ theo convention của framework.
+| Thành phần | Vai trò |
+|---|---|
+| `ProducerFactory` / `KafkaTemplate` | Producer baseline |
+| `ConsumerFactory` | Consumer baseline |
+| `ConcurrentKafkaListenerContainerFactory` | Listener factory theo config LSF |
+| `DefaultErrorHandler` | Retry và recover sang DLQ |
+| `DeadLetterPublishingRecoverer` | Publish message lỗi sang DLQ |
+| `SerdeFactory` | Helper tạo Serde cho Kafka/Kafka Streams |
+| `LsfDlqReasonClassifier` | Phân loại lý do vào DLQ |
 
-## Giới hạn hiện tại
+## DLQ headers
 
-- repo chưa có full integration suite với broker thật cho toàn bộ flow retry -> DLQ -> replay
-- phần schema governance vẫn dựa vào hạ tầng Kafka/Schema Registry bên ngoài, không được framework trừu tượng hóa hoàn toàn
+DLQ record được bổ sung metadata để debug/replay dễ hơn, ví dụ:
+
+- topic/partition/offset gốc
+- exception class/message
+- DLQ reason
+- correlation id/event metadata nếu có
+
+## Lưu ý
+
+- `lsf.kafka.dlq.enabled=true` chỉ có ý nghĩa khi service dùng listener factory do starter tạo.
+- Retry không tự làm operation trở nên idempotent; handler cần an toàn trước duplicate event.
+- Nếu dùng Confluent Schema Registry, cần đảm bảo service có dependency serializer phù hợp.

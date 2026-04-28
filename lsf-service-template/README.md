@@ -1,161 +1,103 @@
 # lsf-service-template
 
-Module này cung cấp một service scaffold có thể copy/adapt khi team muốn tạo microservice mới trên framework LSF.
+> Service scaffold để tạo microservice mới trên nền LSF.
 
-Nó không cố trở thành một business demo đầy đủ. Thay vào đó, nó chỉ ra cách một service mới nên được lắp ghép từ các module framework hiện có:
+Module này không phải business service hoàn chỉnh. Nó là mẫu tham khảo cho cách tổ chức package, khai báo dependency, expose internal API, publish/consume event, gọi downstream HTTP và tham gia workflow.
 
-- dependency baseline
-- package/project structure
-- actuator/health setup
-- security baseline
-- sync HTTP client usage
-- Kafka producer/consumer usage
-- correlation propagation
-- outbox-aware publishing
-- saga participant reply pattern
+## Dùng khi nào?
 
-## Khi nào nên dùng
+- Muốn tạo service mới theo convention LSF.
+- Muốn xem một skeleton đã nối sẵn web, security, eventing, outbox, HTTP client và saga workflow.
+- Muốn copy/adapt cấu trúc project thay vì bắt đầu từ Spring Initializr trống.
 
-Dùng module này khi bạn muốn tạo service mới và cần một điểm xuất phát rõ ràng thay vì ghép tay từng starter.
+## Capability minh họa
 
-Nó phù hợp nhất cho:
+| Capability | Module/Thành phần |
+|---|---|
+| REST internal API | `lsf-service-web-starter` |
+| Request/trace propagation | `lsf-contracts`, `lsf-service-web-starter` |
+| HTTP client | `lsf-http-client-starter` |
+| Event publishing | `lsf-eventing-starter`, `lsf-kafka-starter` |
+| Event handling | `@LsfEventHandler` |
+| Outbox runtime | profile MySQL/PostgreSQL |
+| Workflow participant | `lsf-saga-starter` |
 
-- service CRUD/event-driven cơ bản có REST ingress
-- service cần gọi sync HTTP sang service khác
-- service publish event ra Kafka
-- service consume event qua `@LsfEventHandler`
-- service là downstream participant trong saga/event workflow
+## Chạy template service
 
-## Cấu trúc module
+Từ root repo:
+
+```bash
+cd D:\IdeaProjects\lsf-parent
+mvn -pl lsf-service-template -am spring-boot:run
+```
+
+Chạy với profile Docker:
+
+```bash
+mvn -pl lsf-service-template -am spring-boot:run -Dspring-boot.run.profiles=docker
+```
+
+Chạy với outbox MySQL:
+
+```bash
+mvn -pl lsf-service-template -am spring-boot:run -Dspring-boot.run.profiles=outbox-mysql
+```
+
+Chạy với outbox PostgreSQL:
+
+```bash
+mvn -pl lsf-service-template -am spring-boot:run -Dspring-boot.run.profiles=outbox-postgres
+```
+
+## Endpoint mẫu
+
+| Method | Path | Mục đích |
+|---|---|---|
+| `GET` | `/internal/template/context` | Xem request context hiện tại |
+| `GET` | `/internal/template/dependency/capabilities` | Gọi downstream dependency qua HTTP client |
+| `POST` | `/internal/template/work-items` | Tạo work item mẫu và publish integration event |
+
+## Cấu trúc thư mục
 
 ```text
-src/main/java/com/myorg/lsf/template
-|-- api/
-|-- application/
-|-- config/
-|-- integration/http/
-|-- messaging/
-|-- support/
-`-- workflow/
+lsf-service-template/
+├─ src/main/java/com/myorg/lsf/template/
+│  ├─ api/                 # REST controllers và DTO API
+│  ├─ application/         # Business service mẫu
+│  ├─ config/              # Properties/config riêng của template
+│  ├─ integration/http/    # HTTP client và gateway tới dependency
+│  ├─ messaging/           # Event types, publisher, handlers
+│  ├─ support/             # Request metadata helpers
+│  └─ workflow/            # Workflow participant handlers
+└─ src/main/resources/
+   ├─ application.yml
+   ├─ application-docker.yml
+   ├─ application-outbox-mysql.yml
+   └─ application-outbox-postgres.yml
 ```
 
-Ý nghĩa các nhóm chính:
+## Cấu hình riêng của template
 
-- `api/`: REST controller, request/response models
-- `application/`: application service orchestration
-- `config/`: typed service properties
-- `integration/http/`: `@LsfHttpClient` và gateway wrapper
-- `messaging/`: producer + consumer examples
-- `workflow/`: ví dụ service tham gia saga bằng command/reply event
-
-## Dependency baseline
-
-`pom.xml` của module đã include baseline sau:
-
-- `lsf-service-web-starter`
-- `lsf-security-starter`
-- `lsf-discovery-starter`
-- `lsf-http-client-starter`
-- `lsf-resilience-starter`
-- `lsf-kafka-starter`
-- `lsf-eventing-starter`
-- `lsf-outbox-core`
-- `spring-boot-starter-web`
-- `spring-boot-starter-actuator`
-- `spring-boot-starter-validation`
-
-Với outbox runtime, service thật nên chọn một module theo database:
-
-```xml
-<dependency>
-  <groupId>com.myorg.lsf</groupId>
-  <artifactId>lsf-outbox-mysql-starter</artifactId>
-  <version>${project.version}</version>
-</dependency>
+```yaml
+template:
+  service:
+    integration-topic: template.integration.events
+    integration-event-type: template.resource.requested.v1
+    workflow-reply-topic: template.workflow.replies
+    workflow-completed-event-type: template.workflow.step.completed.v1
 ```
 
-hoặc
+## Cách dùng làm scaffold
 
-```xml
-<dependency>
-  <groupId>com.myorg.lsf</groupId>
-  <artifactId>lsf-outbox-postgres-starter</artifactId>
-  <version>${project.version}</version>
-</dependency>
-```
+1. Copy module hoặc tạo module mới dựa trên cấu trúc này.
+2. Đổi package `com.myorg.lsf.template` thành package service thật.
+3. Đổi `artifactId`, `spring.application.name`, topic names và event types.
+4. Xóa controller/DTO demo không cần thiết.
+5. Giữ các starter LSF đúng với nhu cầu service.
+6. Viết README riêng cho service mới, mô tả business flow cụ thể.
 
-## Những gì scaffold này minh họa
+## Lưu ý
 
-### 1. Sync HTTP client
-
-- `TemplateDependencyClient` dùng `@LsfHttpClient` + `@HttpExchange`
-- service discovery dùng `dependency-service`
-- resilience/auth/header propagation đi qua `lsf-http-client-starter`
-
-### 2. REST ingress + correlation context
-
-- `TemplateInternalController` expose endpoint cơ bản
-- endpoint `/internal/template/context` cho thấy `LsfRequestContextHolder`
-- `lsf-service-web-starter` tự manage `correlation-id`, `causation-id`, `request-id`
-
-### 3. Kafka producer + outbox-aware publishing
-
-- `TemplateIntegrationEventPublisher` minh họa 2 path:
-  - có `OutboxWriter` -> append vào outbox
-  - chưa có `OutboxWriter` -> publish trực tiếp qua `LsfPublisher`
-- metadata correlation/request được lấy từ `LsfRequestContextHolder`
-
-### 4. Kafka consumer
-
-- `TemplateInboundEventHandlers` minh họa consumer theo `@LsfEventHandler`
-- không cần tự viết `@KafkaListener` ở service adopter
-
-### 5. Saga participation
-
-- `TemplateWorkflowParticipantHandlers` minh họa pattern downstream participant
-- service nhận `template.workflow.step.requested.v1`
-- service trả `template.workflow.step.completed.v1`
-- `correlationId`, `causationId`, `requestId` được preserve khi publish reply
-
-## Cấu hình mẫu
-
-- `application.yml`
-  - baseline actuator + probes
-  - API key security
-  - static discovery cho local/dev
-  - HTTP client timeouts + resilience
-  - Kafka/eventing topics
-- `application-outbox-mysql.yml`
-  - block cấu hình outbox cho MySQL
-- `application-outbox-postgres.yml`
-  - block cấu hình outbox cho PostgreSQL
-
-## Cách team tạo service mới từ template
-
-1. Copy `lsf-service-template` thành module mới, ví dụ `customer-service`.
-2. Đổi `artifactId`, package root, `spring.application.name`, và các event/service ids.
-3. Giữ nguyên baseline framework dependencies, sau đó chọn thêm một outbox runtime theo database.
-4. Thay controller/request/response placeholder bằng API thật của service.
-5. Thay `TemplateDependencyClient` bằng HTTP client interface tới downstream service thật.
-6. Thay event payloads/event types trong `messaging/` và `workflow/` bằng contracts của domain.
-7. Nếu service không dùng saga participant hoặc outbox, xóa hoặc tắt phần scaffold không cần.
-
-## Ghi chú
-
-- Module này là scaffolding/reference implementation, không nhằm thay thế `lsf-example`.
-- `lsf-example` vẫn phù hợp để xem flow business nhiều hơn.
-- `lsf-service-template` phù hợp hơn khi bạn muốn biết “service mới nên bắt đầu từ đâu”.
-
-## Docker và deployment baseline
-
-Từ Phase 6, module này đi kèm:
-
-- `Dockerfile` multi-stage để build image từ root multi-module repo
-- `application-docker.yml` cho local/container network baseline
-- Helm skeleton chung ở `ops/deployment/helm/lsf-service`
-
-Khi adopter copy module này thành service mới:
-
-1. đổi module name trong `Dockerfile` nếu không còn dùng tên `lsf-service-template`
-2. đổi `SPRING_PROFILES_ACTIVE`, image name, và env vars theo runtime thật
-3. dùng chart Helm như skeleton, không coi đó là production chart hoàn chỉnh cho mọi môi trường
+- Template là tài sản adoption, không phải product runtime độc lập.
+- Không nên giữ nguyên API demo khi đưa vào business service thật.
+- Secret, API key và endpoint production phải được cấu hình ngoài source code.

@@ -1,299 +1,325 @@
-﻿# LSF
+# LSF - Large Scale Framework
 
-LSF là một repository framework Java/Spring Boot theo mô hình multi-module, được xây dựng để hỗ trợ phát triển microservices quy mô lớn theo hướng thực dụng. Trọng tâm của repo là gom các concern lặp lại giữa nhiều service thành các starter và asset có thể tái sử dụng: shared contracts, eventing, retry/DLQ, outbox, sync HTTP conventions, quota/reservation, orchestration, observability, cùng baseline vận hành và triển khai.
+> Framework Java/Spring Boot dạng multi-module, được xây dựng để chuẩn hóa các phần hạ tầng thường lặp lại trong hệ thống microservices: Kafka/eventing, outbox, quota/reservation, saga orchestration, sync HTTP, security, discovery, resilience và observability.
 
-Repository này được định vị như một framework dùng cho luận văn, không phải một platform hoàn chỉnh hay một bộ sản phẩm “giải quyết mọi thứ” cho microservices. Các module có mức hoàn thiện khác nhau; vì vậy tài liệu ưu tiên mô tả đúng trạng thái hiện có, chỉ rõ phần nào đã hỗ trợ tốt, phần nào mới ở mức partial support, scaffold hoặc future work.
+LSF là framework phục vụ đồ án/luận văn và được kiểm chứng một phần qua hệ thống ecommerce consumer nằm ở repo `ecommerce-backend` trong cùng workspace. Ecommerce chỉ là case study để chứng minh khả năng áp dụng; các module của LSF có thể dùng cho nhiều hệ microservices khác có nhu cầu eventing, reliable publishing, quota/reservation, workflow và observability. Dự án này không cố thay thế toàn bộ Spring Cloud, Kubernetes hay các nền tảng vận hành production; mục tiêu chính là gom các pattern hạ tầng có thể tái sử dụng để service mới tập trung nhiều hơn vào business logic.
 
-## Framework này hiện cung cấp gì?
+> **Lưu ý về mức trưởng thành:** Không phải tất cả module đều có cùng mức độ hoàn thiện. Các module được kiểm chứng rõ nhất qua consumer hiện tại là Kafka/eventing, observability, outbox MySQL, quota/reservation và saga checkout. Một số module khác đang ở mức starter/baseline; nên đọc thêm [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md) trước khi áp dụng cho hệ thống thật.
 
-| Capability area | Modules | Vai trò ở mức framework | Trạng thái hiện tại |
+## Đọc nhanh
+
+| Mục tiêu đọc | Nên đọc |
+|---|---|
+| Hiểu LSF là gì và dùng cho ai | Phần giới thiệu, [Dành cho ai?](#dành-cho-ai), [Kiến trúc tổng quan](#kiến-trúc-tổng-quan) |
+| Chọn module phù hợp | [Chọn module theo nhu cầu](#chọn-module-theo-nhu-cầu), [Module trong repository](#module-trong-repository) |
+| Cài đặt và chạy source | [Cài đặt và chạy](#cài-đặt-và-chạy), [Database, migration và seed](#database-migration-và-seed) |
+| Demo hoặc bảo vệ luận văn | [Kiểm chứng qua consumer](#kiểm-chứng-qua-consumer), [Trạng thái hoàn thành](#trạng-thái-hoàn-thành) |
+| Phát triển hoặc mở rộng framework | [Cấu trúc thư mục](#cấu-trúc-thư-mục), [Dùng LSF trong service khác](#dùng-lsf-trong-service-khác), [Lỗi phổ biến khi chạy và cách sửa](#lỗi-phổ-biến-khi-chạy-và-cách-sửa) |
+
+## Dành cho ai?
+
+- Sinh viên hoặc nhóm phát triển muốn nghiên cứu microservices hướng sự kiện bằng Java/Spring Boot.
+- Developer cần một bộ starter dùng lại cho Kafka, outbox, quota, event handler, tracing và REST nội bộ.
+- Team muốn áp dụng dần các building block hạ tầng của LSF vào hệ thống microservices sẵn có hoặc service mới.
+
+## Công nghệ chính
+
+| Nhóm | Công nghệ |
+|---|---|
+| Ngôn ngữ | Java 21 |
+| Framework | Spring Boot 3.5.7, Spring Cloud 2025.0.0 |
+| Messaging | Apache Kafka, Confluent Schema Registry |
+| Database/runtime | MySQL, PostgreSQL, Redis |
+| Reliability | Outbox pattern, Resilience4j, retry/DLQ |
+| Observability | Spring Actuator, Micrometer, Prometheus, Zipkin |
+| Build/test | Maven, JUnit, Testcontainers, Flyway |
+
+## Chọn module theo nhu cầu
+
+| Nhu cầu | Module nên dùng |
+|---|---|
+| Publish/consume Kafka event | `lsf-kafka-starter`, `lsf-eventing-starter` |
+| Chuẩn hóa event contract | `lsf-contracts` |
+| Publish event đáng tin cậy sau DB transaction | `lsf-outbox-core`, `lsf-outbox-mysql-starter`, `lsf-outbox-postgres-starter` |
+| Chống oversell/giữ tài nguyên tạm thời | `lsf-quota-starter` |
+| Điều phối workflow nhiều bước | `lsf-saga-starter` |
+| Quan sát metric/tracing/log context | `lsf-observability-starter` |
+| Gọi REST nội bộ có retry/timeout | `lsf-http-client-starter`, `lsf-resilience-starter` |
+| Tạo service mới theo mẫu | `lsf-service-template` |
+
+## Module trong repository
+
+| Module | Vai trò | Khi nào dùng? | README |
 |---|---|---|---|
-| Core contracts | `lsf-contracts` | Chuẩn hóa `EventEnvelope`, request/trace context, retry classification, sync error model và quota contracts | Core library, được nhiều starter dùng lại |
-| Platform foundations | `lsf-config-starter`, `lsf-discovery-starter`, `lsf-gateway-starter`, `lsf-security-starter`, `lsf-resilience-starter` | Cấu hình tập trung, service resolution, gateway conventions, auth baseline, retry/circuit/timeout/rate-limit | Starter-level support, không thay thế server hoặc platform bên ngoài |
-| Sync service interaction | `lsf-service-web-starter`, `lsf-http-client-starter` | Chuẩn hóa sync HTTP ingress/egress, canonical headers, `LsfErrorResponse`, `RestClient` proxy, discovery/resilience/auth propagation | Starter-level support, hiện thiên về servlet-based services và đã có minimal cross-module runtime evidence cho path `service-web + http-client + security + resilience` |
-| Event-driven runtime | `lsf-kafka-starter`, `lsf-eventing-starter`, `lsf-observability-starter` | Kafka defaults, retry/DLQ, envelope dispatch, idempotency, metrics/MDC/observation quanh event handling | Đã có focused tests và cross-module runtime path cho Kafka + eventing + observability; chưa có full end-to-end broker suite cho mọi luồng |
-| Reliable publishing and admin tooling | `lsf-outbox-core`, `lsf-outbox-mysql-starter`, `lsf-outbox-postgres-starter`, `lsf-outbox-admin-starter`, `lsf-kafka-admin-starter` | Outbox append/publisher theo DB, inspect/requeue/delete outbox rows, inspect/replay DLQ records | MySQL được kiểm chứng sâu hơn; Kafka admin đã có broker-backed regression, outbox admin đã có vendor-specific MySQL/PostgreSQL regression, nhưng admin tooling vẫn nên xem là support có kiểm soát |
-| Workflow and resource control | `lsf-quota-streams-starter`, `lsf-saga-starter` | Reserve/confirm/release cho tài nguyên hữu hạn, saga orchestration theo event với timeout/compensation | Có runtime và test framework-level; orchestration graph phức tạp hơn vẫn là future work |
-| Adoption assets | `lsf-service-template`, `lsf-example`, `ops/`, `.github/`, `docker-compose.yml` | Scaffold service mới, example app, monitoring/deployment baselines, CI/CD skeleton | Scaffold/example assets, không nên diễn giải như production blueprint đầy đủ |
+| `lsf-contracts` | Shared contracts như `EventEnvelope`, headers, request/trace context, quota commands và `LsfErrorResponse` | Khi nhiều service cần thống nhất contract | [README](lsf-contracts/README.md) |
+| `lsf-kafka-starter` | Kafka producer/consumer defaults, retry, DLQ, serializer/deserializer baseline | Service publish/consume Kafka | [README](lsf-kafka-starter/README.md) |
+| `lsf-eventing-starter` | Handler registry, `@LsfEventHandler`, envelope listener, publisher API và idempotency | Service muốn xử lý event theo handler thay vì tự route trong listener | [README](lsf-eventing-starter/README.md) |
+| `lsf-observability-starter` | MDC, metrics và observation wrapper quanh dispatcher | Service cần theo dõi async event handling | [README](lsf-observability-starter/README.md) |
+| `lsf-outbox-core` | Abstraction chung cho outbox writer và SQL helper | Module nền cho runtime outbox | [README](lsf-outbox-core/README.md) |
+| `lsf-outbox-mysql-starter` | Runtime outbox cho MySQL | Service dùng MySQL cần publish event sau DB transaction | [README](lsf-outbox-mysql-starter/README.md) |
+| `lsf-outbox-postgres-starter` | Runtime outbox cho PostgreSQL | Service dùng PostgreSQL cần outbox | [README](lsf-outbox-postgres-starter/README.md) |
+| `lsf-outbox-admin-starter` | REST API để list, inspect, requeue, mark failed, delete outbox rows | Internal admin/ops tool cho outbox | [README](lsf-outbox-admin-starter/README.md) |
+| `lsf-kafka-admin-starter` | REST API inspect/replay Kafka DLQ records | Khi cần bằng chứng vận hành và replay DLQ có kiểm soát | [README](lsf-kafka-admin-starter/README.md) |
+| `lsf-quota-starter` | Reserve/confirm/release cho tài nguyên hữu hạn, có memory/Redis state và policy provider | Inventory hold, booking slot, flash sale, coupon quota | [README](lsf-quota-starter/README.md) |
+| `lsf-saga-starter` | Saga orchestration tuần tự theo event, timeout, compensation và JDBC/in-memory store | Workflow nhiều bước cần điều phối có kiểm soát | [README](lsf-saga-starter/README.md) |
+| `lsf-service-web-starter` | Servlet ingress conventions: request context filter và error response chuẩn | REST service nội bộ cần chuẩn hóa header/error | [README](lsf-service-web-starter/README.md) |
+| `lsf-http-client-starter` | Declarative HTTP client trên `RestClient`, discovery, resilience và auth propagation | Service gọi REST tới service khác | [README](lsf-http-client-starter/README.md) |
+| `lsf-config-starter` | Convention cho config import local/config server | Service cần bootstrap cấu hình tập trung | [README](lsf-config-starter/README.md) |
+| `lsf-discovery-starter` | `LsfServiceLocator`, static discovery và bridge tới Spring `DiscoveryClient` | Local/dev/test discovery hoặc abstraction cho HTTP client | [README](lsf-discovery-starter/README.md) |
+| `lsf-gateway-starter` | Spring Cloud Gateway conventions và correlation headers | Gateway muốn khai báo route theo convention LSF | [README](lsf-gateway-starter/README.md) |
+| `lsf-security-starter` | API key/JWT security baseline cho servlet service | Internal APIs hoặc admin endpoints cần bảo vệ nhanh | [README](lsf-security-starter/README.md) |
+| `lsf-resilience-starter` | Executor và policy resolver cho retry, circuit breaker, timeout, rate limit | Gọi downstream có rủi ro lỗi tạm thời | [README](lsf-resilience-starter/README.md) |
+| `lsf-service-template` | Service scaffold dùng các starter LSF | Bắt đầu service mới theo chuẩn framework | [README](lsf-service-template/README.md) |
+| `lsf-example` | Demo application cho eventing, outbox, quota và flash-sale flow | Học nhanh cách các module phối hợp | [README](lsf-example/README.md) |
 
-### Cách đọc trạng thái hỗ trợ
+## Kiến trúc tổng quan
 
-- `core library`: module nền dùng làm hợp đồng chung hoặc abstraction cốt lõi.
-- `starter-level support`: module runtime dùng được ở mức framework, có auto-configuration và test tương ứng.
-- `partial support`: tính năng có thật nhưng chưa được chứng minh sâu bằng full integration/runtime breadth.
-- `scaffold/example`: tài sản hướng dẫn áp dụng framework, không phải runtime product độc lập.
-
-## Kiến trúc ở mức cao
-
-LSF được tổ chức theo các lớp concern thay vì theo từng business domain:
-
-```text
-Ingress / Edge
-  -> lsf-gateway-starter (optional)
-  -> lsf-service-web-starter + lsf-security-starter
-       -> application code
-       -> lsf-http-client-starter + lsf-discovery-starter + lsf-resilience-starter
-       -> lsf-quota-streams-starter / lsf-saga-starter
-       -> lsf-eventing-starter + lsf-kafka-starter
-       -> lsf-outbox-core + lsf-outbox-<db>-starter
-
-Async consumption
-  Kafka
-    -> lsf-kafka-starter
-    -> lsf-eventing-starter
-    -> lsf-observability-starter
-    -> service handlers
-
-Operations
-  -> lsf-kafka-admin-starter
-  -> lsf-outbox-admin-starter
-  -> ops/monitoring
-  -> ops/deployment
+```mermaid
+flowchart LR
+    client[Client / Gateway] --> gateway[lsf-gateway-starter]
+    gateway --> web[lsf-service-web-starter]
+    web --> security[lsf-security-starter]
+    security --> service[Business service]
+    service --> http[lsf-http-client-starter]
+    http --> resilience[lsf-resilience-starter]
+    service --> quota[lsf-quota-starter]
+    service --> saga[lsf-saga-starter]
+    service --> eventing[lsf-eventing-starter]
+    eventing --> kafka[lsf-kafka-starter]
+    service --> outbox["lsf-outbox-core + lsf-outbox-&lt;db&gt;-starter"]
+    service --> observability[lsf-observability-starter]
+    outbox --> ops[Outbox/Admin evidence]
+    kafka --> kafkaAdmin[lsf-kafka-admin-starter]
 ```
 
-Chi tiết kiến trúc, lý do từng capability thuộc framework, cách adopter dùng và future work được mô tả ở [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+```text
+Client / Gateway
+  -> lsf-gateway-starter
+  -> lsf-service-web-starter + lsf-security-starter
+      -> business service
+      -> lsf-http-client-starter + lsf-discovery-starter + lsf-resilience-starter
+      -> lsf-quota-starter
+      -> lsf-saga-starter
+      -> lsf-eventing-starter + lsf-kafka-starter
+      -> lsf-outbox-core + lsf-outbox-<db>-starter
 
-## Cách adopter dùng framework
+Operations
+  -> lsf-observability-starter
+  -> lsf-outbox-admin-starter
+  -> lsf-kafka-admin-starter
+```
 
-### 1. Service event-driven tối thiểu
+Một service không cần dùng tất cả module. Ví dụ:
 
-Nếu service chỉ cần publish/consume Kafka với shape event thống nhất:
+- Service chỉ publish/consume event: `lsf-contracts`, `lsf-kafka-starter`, tùy chọn `lsf-eventing-starter`.
+- Service cần chống oversell: thêm `lsf-quota-starter`.
+- Service cần publish event chắc chắn sau transaction: thêm `lsf-outbox-core` và một runtime outbox.
+- Service cần REST nội bộ: dùng `lsf-service-web-starter`, `lsf-http-client-starter`, `lsf-discovery-starter`, `lsf-resilience-starter`.
 
-- dùng `lsf-contracts`
-- thêm `lsf-kafka-starter`
-- thêm `lsf-eventing-starter` khi muốn handler-style dispatch
-- thêm `lsf-observability-starter` nếu muốn metrics/MDC/observation quanh dispatcher
+## Kiểm chứng qua consumer
 
-### 2. Service cần publish event sau transaction database
+Repository này chỉ chứa framework và các starter tái sử dụng, nên không đặt ảnh kịch bản nghiệp vụ trực tiếp trong README của LSF. Các ảnh minh họa checkout flow, saga console, reservation chống oversell, outbox và JMeter được đặt ở README của consumer `ecommerce-backend`, vì đó là nơi thể hiện LSF khi áp dụng vào một hệ thống chạy thật.
 
-Nếu service phải tránh dual-write:
+## Cấu trúc thư mục
 
-- dùng `lsf-outbox-core`
-- chọn đúng runtime: `lsf-outbox-mysql-starter` hoặc `lsf-outbox-postgres-starter`
-- thêm `lsf-outbox-admin-starter` khi cần inspect/requeue nội bộ
+```text
+lsf-parent/
+├─ docs/                         # Tài liệu kiến trúc, adoption, compatibility, maturity
+├─ ops/                          # Baseline monitoring/deployment
+├─ lsf-*-starter/                # Các Spring Boot starter của framework
+├─ lsf-contracts/                # Shared contract module
+├─ lsf-outbox-core/              # Core outbox abstraction
+├─ lsf-service-template/         # Scaffold service mới
+├─ lsf-example/                  # Demo application
+├─ docker-compose.yml            # Infra/demo baseline
+└─ pom.xml                       # Maven parent và dependency management
+```
 
-### 3. Service cần sync HTTP giữa microservices
-
-Nếu service có internal REST APIs hoặc gọi downstream bằng HTTP:
-
-- dùng `lsf-service-web-starter`
-- dùng `lsf-http-client-starter`
-- dùng lại `lsf-discovery-starter`, `lsf-security-starter`, `lsf-resilience-starter`
-
-### 4. Service có workflow hoặc cạnh tranh tài nguyên
-
-Nếu service cần điều phối nhiều bước hoặc tránh oversell/overbooking:
-
-- dùng `lsf-quota-streams-starter` cho reserve/confirm/release
-- dùng `lsf-saga-starter` cho orchestration theo event với timeout và compensation
-
-### 5. Bootstrap service mới trên nền LSF
-
-Nếu muốn bắt đầu nhanh:
-
-- xem `lsf-service-template/` như scaffold
-- xem `lsf-example/` như app minh họa cách nhiều starter phối hợp
-- dùng `ops/` và `ops/deployment/` như baseline vận hành, không phải production template hoàn chỉnh cho mọi tổ chức
-
-## Validation hiện có
-
-Các vòng hoàn thiện gần đây đã tăng đáng kể độ chín của test cho các module runtime ưu tiên:
-
-- `lsf-kafka-starter`
-- `lsf-eventing-starter`
-- `lsf-observability-starter`
-- `lsf-outbox-admin-starter`
-- `lsf-kafka-admin-starter`
-- `lsf-saga-starter`
-
-Các nhóm test nổi bật hiện có trong repo:
-
-- focused unit tests cho dispatcher, publisher, metrics, idempotency, service/repository logic
-- `ApplicationContextRunner` tests cho auto-configuration và fail-fast behavior
-- lightweight integration/repository tests với H2 ở nơi phù hợp
-- controller tests cho admin endpoints
-- tracing/metrics propagation tests quanh event dispatch
-- broker-backed Testcontainers regression cho `lsf-kafka-admin-starter` để verify đọc DLQ records, replay single record, replay headers và replay metrics
-- cross-module runtime test tối thiểu cho `lsf-kafka-starter` + `lsf-eventing-starter` + `lsf-observability-starter` để verify publish, dispatch, metadata propagation, metrics và observation
-- cross-module runtime test tối thiểu cho `lsf-service-web-starter` + `lsf-http-client-starter` + `lsf-security-starter` + `lsf-resilience-starter` để verify API key auth, request/trace propagation, `LsfErrorResponse` decode, retryable retry và non-retryable stop
-- vendor-specific MySQL/PostgreSQL regression cho `lsf-outbox-admin-starter`, dùng lại schema từ runtime modules
-- runtime integration test mặc định cho `lsf-saga-starter`, dùng `direct transport` + JDBC store + `EmbeddedKafka` để verify sequential success path, reply correlation, metadata propagation và compensation path tối thiểu
-- profile `heavy-integration` để gate các suite dùng broker/database thật khỏi lane verify mặc định
-
-Các giới hạn xác thực hiện vẫn cần được nêu rõ:
-
-- chưa có broker-backed end-to-end chain phủ toàn bộ listener failure -> retry -> DLQ -> replay cho mọi module liên quan
-- sync HTTP runtime coverage hiện mới chứng minh servlet path tối thiểu với local service locator fixture; chưa phải discovery-specific matrix hay reactive/WebFlux parity
-- `lsf-saga-starter` mới có runtime integration cho sequential direct-transport path; outbox transport path vẫn chưa được cover trong phase hiện tại
-- vendor-specific regression mới tập trung vào `lsf-outbox-admin-starter`; các lớp DB-sensitive khác chưa có suite tương đương
-- `lsf-kafka-admin-starter` auto-configuration tests vẫn tạo `AdminClient` nhắm tới `localhost:9092`, nên có thể xuất hiện warning log nếu máy local không có broker
-- các suite container-backed được tách sau profile `heavy-integration`, không chạy trong lane verify mặc định
-- một số suite cần Docker/Testcontainers hoặc MySQL cục bộ để chạy trọn vẹn, vì vậy kết quả `mvn test` trên máy mới có thể fail do thiếu hạ tầng chứ không phản ánh framework bị hỏng logic cốt lõi
-
-## Bản đồ tài liệu
-
-- [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md): adoption contract ở mức platform, concern map, public surface area và non-goals
-- [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md): audit toàn bộ module và phân loại `stable` / `partial support` / `experimental-scaffold`
-- [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md): baseline compatibility matrix và note riêng cho consumer `ecommerce-backend`
-- [docs/UPGRADING.md](docs/UPGRADING.md): migration path từ custom code sang LSF và guidance khi nâng cấp snapshot/milestone
-- [docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md): release contract, public API expectations, deprecation và owner decisions
-- [docs/GOLDEN_PATHS.md](docs/GOLDEN_PATHS.md): các đường áp dụng khuyến nghị cho adopter và Codex rollout
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): kiến trúc tổng thể, diễn tiến capability qua các phase, cách adopter dùng framework và future work
-- [lsf-example/README.md](lsf-example/README.md): example application để demo eventing, outbox, quota và flash-sale reservation theo cách gần với consumer hơn scaffold thuần túy
-- [lsf-contracts/README.md](lsf-contracts/README.md): shared contracts, headers, request/trace context, sync error model
-- [lsf-config-starter/README.md](lsf-config-starter/README.md), [lsf-discovery-starter/README.md](lsf-discovery-starter/README.md), [lsf-gateway-starter/README.md](lsf-gateway-starter/README.md), [lsf-security-starter/README.md](lsf-security-starter/README.md), [lsf-resilience-starter/README.md](lsf-resilience-starter/README.md): các module foundation cho config, discovery, gateway, security và resilience
-- [lsf-kafka-starter/README.md](lsf-kafka-starter/README.md): Kafka defaults, retry/DLQ, headers, metrics baseline
-- [lsf-eventing-starter/README.md](lsf-eventing-starter/README.md): handler model, listener auto-config, idempotency, publisher API
-- [lsf-observability-starter/README.md](lsf-observability-starter/README.md): dispatcher metrics, MDC, observation hooks
-- [lsf-outbox-core/README.md](lsf-outbox-core/README.md): outbox abstraction chung cho các runtime theo database
-- [lsf-outbox-mysql-starter/README.md](lsf-outbox-mysql-starter/README.md): outbox runtime cho MySQL
-- [lsf-outbox-postgres-starter/README.md](lsf-outbox-postgres-starter/README.md): outbox runtime cho PostgreSQL
-- [lsf-outbox-admin-starter/README.md](lsf-outbox-admin-starter/README.md): endpoint vận hành outbox
-- [lsf-kafka-admin-starter/README.md](lsf-kafka-admin-starter/README.md): inspect/replay DLQ records
-- [lsf-quota-streams-starter/README.md](lsf-quota-streams-starter/README.md): quota/reservation capability
-- [lsf-saga-starter/README.md](lsf-saga-starter/README.md): orchestration/saga runtime
-- [lsf-service-web-starter/README.md](lsf-service-web-starter/README.md): sync HTTP ingress conventions
-- [lsf-http-client-starter/README.md](lsf-http-client-starter/README.md): sync HTTP client conventions
-- [lsf-service-template/README.md](lsf-service-template/README.md): scaffold để adopter tạo service mới
-- [ops/README.md](ops/README.md): monitoring và operations baseline
-- [ops/deployment/README.md](ops/deployment/README.md): CI/CD, Docker, Compose và Helm skeleton
-
-## Saga note from consumer evidence
-
-- `lsf-saga-starter` remains a `partial support` module.
-- The best-proven runtime path is still `jdbc + direct`.
-- Real consumer evidence from `D:\IdeaProjects\ecommerce-backend` justified a narrow public helper for local reply fan-in before a sequential saga step advances.
-- That improvement reduces consumer glue without changing the framing of LSF into a general workflow engine.
-- Consumer demo hiện tại có thể cấu hình `order-service` mặc định ở `app.order.workflow.mode=lsf-saga`, nhưng đây nên được hiểu là quyết định demo/cutover có kiểm soát ở consumer project, không đồng nghĩa `lsf-saga-starter` đã đạt mức production-ready toàn diện.
-- `legacy` vẫn là rollback path hợp lệ ở consumer; framework docs nên tiếp tục mô tả saga như một module đã có bằng chứng runtime hữu ích nhưng chưa đủ rộng để diễn giải như workflow engine tổng quát.
-
-## Quick start
+## Cài đặt và chạy
 
 ### Yêu cầu
 
-- JDK 21 cho Maven runtime. Chạy `mvn -version` và xác nhận dòng `Java version` là `21.x`; repo sẽ fail fast nếu Maven chạy bằng JDK khác baseline.
-- Maven
-- Docker nếu muốn chạy compose baseline, Testcontainers hoặc example app với infra phụ trợ
+- JDK 21
+- Maven 3.9+
+- Docker Desktop nếu chạy Testcontainers, Kafka, Redis, MySQL hoặc demo compose
 
-### Verify toàn bộ repo
+Kiểm tra Java:
 
 ```bash
+mvn -version
+```
+
+Dòng `Java version` cần là `21.x`; repo có Maven Enforcer để fail fast nếu dùng sai JDK.
+
+### Build và verify toàn bộ framework
+
+```bash
+cd <workspace>/lsf-parent
 mvn clean verify
 ```
 
-### Install framework vào local Maven repository
+### Cài framework vào local Maven repository
 
-Lệnh này phù hợp khi consumer repo như `D:\IdeaProjects\ecommerce-backend` cần dùng snapshot mới nhất của framework:
+Lệnh này cần chạy trước khi `ecommerce-backend` consume `1.0-SNAPSHOT`:
 
 ```bash
 mvn clean install
 ```
 
-### Build bỏ qua test
+### Build nhanh bỏ qua test
 
 ```bash
 mvn clean install -DskipTests
 ```
 
-### Quản lý version framework ở consumer
-
-Khuyến nghị consumer repo đặt `lsf.version` tập trung ở root POM và import BOM từ `lsf-parent`:
-
-```xml
-<properties>
-    <java.version>21</java.version>
-    <lsf.version>1.0-SNAPSHOT</lsf.version>
-</properties>
-
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>com.myorg.lsf</groupId>
-            <artifactId>lsf-parent</artifactId>
-            <version>${lsf.version}</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
-```
-
-Sau đó các module LSF trong consumer không cần khai báo `<version>` riêng cho từng dependency. Nếu consumer dùng snapshot local, hãy chạy `mvn clean install` ở repo framework trước khi build repo consume.
-
-Nếu consumer vẫn dùng `spring-boot-starter-parent`, nên giữ Spring Boot và Spring Cloud cùng baseline với framework hiện tại: `3.5.7` và `2025.0.0`.
-
-### Chạy focused framework regression suites
-
-```bash
-mvn -q -pl lsf-kafka-starter,lsf-eventing-starter,lsf-observability-starter,lsf-http-client-starter,lsf-outbox-admin-starter,lsf-kafka-admin-starter,lsf-saga-starter -am test
-```
-
-### Chạy heavy integration suites
-
-```bash
-mvn -B -ntp -pl lsf-kafka-admin-starter -am -Pheavy-integration verify
-mvn -B -ntp -pl lsf-observability-starter -am -Pheavy-integration verify
-mvn -B -ntp -pl lsf-outbox-admin-starter -am -Pheavy-integration verify
-```
-
-### Chạy example application
+### Chạy một module cụ thể
 
 ```bash
 mvn -pl lsf-example spring-boot:run
 ```
 
-### Validate deployment artifacts
-
-```powershell
-pwsh ./ops/deployment/validate.ps1
-```
-
-### Chạy local container baseline
-
-```bash
-docker compose --profile apps up --build
-```
-
-Lệnh compose trên hiện bật các thành phần sau:
-
-- Kafka
-- Schema Registry
-- MySQL
-- Redis
-- Zipkin
-- `lsf-example`
-- `template-service`
-
-Nếu chỉ cần infra nền:
+### Chạy hạ tầng demo bằng Docker Compose
 
 ```bash
 docker compose up -d kafka schema-registry mysql redis zipkin
 ```
 
-## Honest scope và future work
+Nếu muốn chạy cả app demo theo profile compose:
 
-LSF hiện phù hợp nhất khi được hiểu là một framework hỗ trợ chuẩn hóa các concern hạ tầng lặp lại trong microservices lớn:
+```bash
+docker compose --profile apps up --build
+```
 
-- shared contracts và metadata propagation
-- Kafka/eventing conventions
-- reliable publishing theo outbox
-- sync HTTP conventions
-- quota/reservation
-- event-driven orchestration
-- baseline observability, admin và deployment
+## Dùng LSF trong service khác
 
-LSF hiện chưa nên được mô tả như:
+Import BOM từ parent POM:
 
-- một platform hoàn chỉnh thay thế toàn bộ Spring Cloud/Kubernetes ecosystem
-- một workflow engine tổng quát cho mọi graph orchestration
-- một ops suite đầy đủ cho production vận hành đa môi trường
-- một framework đã được chứng minh toàn diện bằng full end-to-end runtime tests ở mọi module
+```xml
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>com.myorg.lsf</groupId>
+      <artifactId>lsf-parent</artifactId>
+      <version>${lsf.version}</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+```
 
-Future work quan trọng còn lại:
+Thêm starter cần dùng:
 
-- full broker-backed end-to-end tests cho listener failure -> retry -> DLQ -> replay trên phạm vi rộng hơn
-- outbox transport integration cho `lsf-saga-starter` và matrix runtime sâu hơn giữa saga + eventing + outbox
-- regression suites theo vendor cho các lớp DB-sensitive khác ngoài `lsf-outbox-admin-starter`
-- mở rộng saga sang branch/parallel join phức tạp hơn
-- tăng chiều sâu cho deployment/ops artifacts nếu cần dùng ngoài phạm vi luận văn
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-kafka-starter</artifactId>
+</dependency>
+```
 
+Ví dụ cấu hình Kafka + eventing:
+
+```yaml
+lsf:
+  kafka:
+    bootstrap-servers: localhost:9092
+    schema-registry-url: http://localhost:8081
+    consumer:
+      group-id: order-service
+      batch: false
+      retry:
+        attempts: 3
+        backoff: 200ms
+    dlq:
+      enabled: true
+  eventing:
+    producer-name: order-service
+    consume-topics:
+      - order-status-envelope-topic
+    idempotency:
+      enabled: true
+      store: memory
+```
+
+Ví dụ outbox:
+
+```yaml
+lsf:
+  outbox:
+    enabled: true
+    table: lsf_outbox
+    publisher:
+      enabled: true
+      scheduling-enabled: true
+      batch-size: 50
+      poll-interval: 1s
+      claim-strategy: SKIP_LOCKED
+```
+
+Ví dụ quota:
+
+```yaml
+lsf:
+  quota:
+    enabled: true
+    store: REDIS
+    default-hold-seconds: 30
+    keep-alive-seconds: 86400
+```
+
+## Database, migration và seed
+
+- LSF framework không sở hữu database business của consumer.
+- Runtime outbox có SQL schema trong classpath của các module runtime DB.
+- Consumer nên quản lý Flyway versioning của chính nó, ví dụ `ecommerce-backend/order-service/src/main/resources/db/migration`.
+- `lsf-example` có profile minh họa MySQL outbox và Redis quota để chạy demo local.
+
+## Tài liệu đọc thêm
+
+Nên đọc trước:
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): kiến trúc tổng thể.
+- [docs/PLATFORM_ADOPTION.md](docs/PLATFORM_ADOPTION.md): contract khi adopter dùng framework.
+- [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md): mức trưởng thành từng module.
+- [docs/GOLDEN_PATHS.md](docs/GOLDEN_PATHS.md): các đường áp dụng khuyến nghị.
+
+Chỉ cần mở khi nâng cấp hoặc chuẩn bị phát hành:
+
+- [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md): compatibility với consumer.
+- [docs/UPGRADING.md](docs/UPGRADING.md): hướng dẫn nâng cấp.
+- [docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md): chính sách release/deprecation.
+
+## Lỗi phổ biến khi chạy và cách sửa
+
+| Lỗi | Nguyên nhân thường gặp | Cách sửa |
+|---|---|---|
+| `LSF framework must be built with JDK 21` | Maven đang chạy bằng JDK khác 21 | Kiểm tra `mvn -version`, đổi `JAVA_HOME` sang JDK 21 rồi chạy lại |
+| Không resolve được dependency Confluent | Maven chưa đọc repository `https://packages.confluent.io/maven/` hoặc mạng/proxy chặn | Kiểm tra mạng, proxy Maven, rồi chạy `mvn -U clean install` |
+| Testcontainers fail hoặc treo khi chạy test | Docker Desktop chưa chạy hoặc không đủ quyền truy cập Docker daemon | Mở Docker Desktop, kiểm tra `docker ps`, sau đó chạy lại test |
+| `ecommerce-backend` không tìm thấy `com.myorg.lsf:*:1.0-SNAPSHOT` | Framework chưa được install vào local Maven repo | Chạy `mvn clean install` trong `<workspace>/lsf-parent` trước |
+| `docker compose` báo port đã được dùng | Kafka/MySQL/Redis/Zipkin hoặc service cũ đang chiếm port | Dừng container/process cũ bằng Docker Desktop hoặc đổi port trong compose |
+| `lsf-example` không kết nối được Kafka/Redis/MySQL | Hạ tầng demo chưa chạy hoặc profile chưa đúng | Chạy `docker compose up -d kafka schema-registry mysql redis zipkin`, rồi chạy app với profile phù hợp |
+
+## Trạng thái hoàn thành
+
+| Nhóm | Trạng thái |
+|---|---|
+| Kafka/eventing/observability | Đã có starter, focused tests và một số cross-module runtime tests |
+| Outbox MySQL | Đã được dùng trong consumer ecommerce, có migration/runtime evidence |
+| Outbox PostgreSQL | Có runtime module và test, mức consumer evidence thấp hơn MySQL |
+| Quota/reservation | Được áp dụng rõ trong `inventory-service` của ecommerce consumer |
+| Saga | Có runtime hữu ích cho flow tuần tự và demo default-on trong consumer, vẫn nên xem là partial support |
+| Gateway/config/discovery/security/resilience/sync HTTP | Starter-level support, phù hợp làm baseline hơn là platform hoàn chỉnh |
+
+## Lưu ý quan trọng
+
+- Không phải mọi module đều production-ready ở cùng mức. Xem thêm [docs/MODULE_MATURITY.md](docs/MODULE_MATURITY.md).
+- Một số test dùng Docker/Testcontainers hoặc broker/database thật, nên cần hạ tầng local phù hợp.
+- Consumer dùng `1.0-SNAPSHOT` cần chạy `mvn clean install` ở repo này trước.
+- Không nên expose admin endpoints như outbox/kafka admin ra internet công khai.
+
+## Tác giả
+
+- **Tên:** Nguyễn Lâm Trường
+- **Email:** lamtruongnguyen2004@gmail.com
+- **GitHub:** [https://github.com/truongnguyen3006](https://github.com/truongnguyen3006)

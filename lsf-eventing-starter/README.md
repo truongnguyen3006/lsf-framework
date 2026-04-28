@@ -1,6 +1,15 @@
 # lsf-eventing-starter
 
-Starter này cho phép service xử lý `EventEnvelope` theo mô hình handler thay vì phải tự viết `@KafkaListener` và tự route từng event type.
+> Starter xử lý `EventEnvelope` theo mô hình handler với `@LsfEventHandler`, publisher API và idempotency tùy chọn.
+
+Thay vì tự viết `@KafkaListener` rồi `switch` theo `eventType`, service có thể khai báo method xử lý business event. Starter sẽ scan handler, convert payload, dispatch và kiểm soát duplicate nếu bật idempotency.
+
+## Dùng khi nào?
+
+- Service consume nhiều loại event theo envelope.
+- Muốn tách Kafka listener khỏi business handler.
+- Muốn idempotency memory/Redis cho event processing.
+- Muốn publish event theo `EventEnvelope` bằng API thống nhất.
 
 ## Dependency
 
@@ -8,104 +17,89 @@ Starter này cho phép service xử lý `EventEnvelope` theo mô hình handler t
 <dependency>
   <groupId>com.myorg.lsf</groupId>
   <artifactId>lsf-eventing-starter</artifactId>
-  <version>${lsf.version}</version>
 </dependency>
 ```
 
-## Những gì starter cung cấp
+Nên dùng kèm:
 
-- `@LsfEventHandler` để khai báo handler theo `eventType`
-- `HandlerRegistry` và `HandlerMethodInvoker`
-- `LsfEnvelopeListener` để nhận `EventEnvelope` từ Kafka
-- `LsfDispatcher` abstraction với các decorator cho context/idempotency/observability
-- `LsfPublisher` để publish event mà không phải tự bọc envelope thủ công
-- idempotency store:
-  - in-memory
-  - Redis
-  - auto chọn Redis hoặc memory
-
-## Handler example
-
-```java
-@Component
-public class BookingHandlers {
-
-    @LsfEventHandler(value = "booking.created.v1", payload = BookingCreated.class)
-    public void onCreated(EventEnvelope envelope, BookingCreated payload) {
-        // business logic
-    }
-}
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-kafka-starter</artifactId>
+</dependency>
 ```
 
-Handler method hiện hỗ trợ 2 kiểu chữ ký:
-
-- `(Payload payload)`
-- `(EventEnvelope envelope, Payload payload)`
-
-## Cấu hình listener và idempotency
+## Cấu hình mẫu
 
 ```yaml
 lsf:
   eventing:
-    producer-name: order-service
-    consume-topics:
-      - booking-events
-    ignore-unknown-event-type: false
+    producer-name: notification-service
     listener:
       enabled: true
+    consume-topics:
+      - order-status-envelope-topic
+      - payment-processed-envelope-topic
+    ignore-unknown-event-type: true
     idempotency:
       enabled: true
-      store: auto
+      store: memory
       ttl: 24h
       processing-ttl: 5m
-      cleanup-interval: 5m
-      max-entries: 500000
-      key-prefix: lsf:idemp:
-      require-redis: false
+      key-prefix: lsf:notification:idemp:{groupId}:
+```
+
+Với Redis idempotency:
+
+```yaml
+lsf:
+  eventing:
+    idempotency:
+      enabled: true
+      store: redis
+      redis:
+        enabled: true
+        key-prefix: lsf:idemp:
+```
+
+## Viết handler
+
+```java
+@Component
+public class OrderStatusHandlers {
+
+    @LsfEventHandler(value = "order.status.changed.v1", payload = OrderStatusEvent.class)
+    public void onOrderStatus(EventEnvelope envelope, OrderStatusEvent payload) {
+        // business logic
+    }
+}
 ```
 
 ## Publish event
 
 ```java
 publisher.publish(
-        "booking-events",
-        "booking-001",
-        "booking.created.v1",
-        "booking-001",
-        new BookingCreated(...)
+    "order-status-envelope-topic",
+    orderNumber,
+    "order.status.changed.v1",
+    orderNumber,
+    payload
 );
 ```
 
-Nếu cần tự cấp metadata rõ hơn:
+## Thành phần chính
 
-```java
-publisher.publish(
-        "booking-events",
-        "booking-001",
-        "booking.created.v1",
-        "booking-001",
-        new BookingCreated(...),
-        LsfPublishOptions.builder()
-                .correlationId("corr-123")
-                .causationId("evt-001")
-                .requestId("req-123")
-                .producer("booking-service")
-                .build()
-);
-```
+| Class | Vai trò |
+|---|---|
+| `LsfEnvelopeListener` | Kafka listener đọc envelope topic |
+| `HandlerRegistry` | Registry các method có `@LsfEventHandler` |
+| `DefaultLsfDispatcher` | Dispatch envelope tới handler phù hợp |
+| `IdempotentLsfDispatcher` | Bọc idempotency quanh dispatcher |
+| `PayloadConverter` | Convert payload JSON sang type khai báo |
+| `DefaultLsfPublisher` | Publish payload/envelope ra Kafka |
 
-## Ghi chú thiết kế
+## Lưu ý
 
-- `DefaultLsfPublisher` tự tạo `EventEnvelope`, bổ sung headers chuẩn và enrich trace headers khi có context.
-- `ignoreUnknownEventType=true` giúp service chọn log+skip thay vì fail nếu gặp event type chưa đăng ký handler.
-- `store=auto` ưu tiên Redis khi có `StringRedisTemplate`, nếu không sẽ fallback memory.
-
-## Validation hiện có
-
-- có cross-module runtime test ghép `LsfPublisher`, Kafka listener/dispatcher path và `lsf-observability-starter`
-- suite này verify publish -> consume -> dispatch, propagation của `correlationId` / `causationId` / `requestId`, cùng metrics và observation trên dispatcher path
-
-## Giới hạn hiện tại
-
-- starter này giải quyết event dispatch ở mức framework, không phải generic workflow engine
-- chưa mở rộng thành bộ cross-module runtime lớn cho mọi transport/runtime combination trong repo
+- `ignore-unknown-event-type=true` hữu ích khi một topic có event chưa được service quan tâm.
+- Nếu handler có side effect, nên bật idempotency và thiết kế handler idempotent.
+- Redis idempotency phù hợp multi-instance; memory idempotency chỉ phù hợp single-instance/dev/test.

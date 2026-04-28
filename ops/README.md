@@ -1,52 +1,48 @@
-# Phase 5 Operations Guide
+# LSF Operations
 
-Tài liệu này mô tả cách bật stack vận hành thực dụng cho LSF ở mức framework:
+> Baseline vận hành cho LSF: metrics, tracing, Grafana/Prometheus, Zipkin, DLQ admin và outbox admin.
 
-- metrics qua `actuator/prometheus`
-- end-to-end tracing qua HTTP/Kafka/saga metadata propagation
-- dashboard Grafana và alert rules Prometheus
-- DLQ inspection/replay qua `lsf-kafka-admin-starter`
-- outbox inspection/requeue qua `lsf-outbox-admin-starter`
+Thư mục `ops/` không phải production ops suite hoàn chỉnh. Nó cung cấp các artifact tham khảo để demo framework và làm nền cho adopter tự mở rộng theo môi trường thật.
 
-Artifact CI/CD, Docker, và Helm skeleton của Phase 6 được tách riêng ở `ops/deployment/README.md`.
+## Thành phần
 
-## 1. Dependency gợi ý cho service framework-level
-
-```xml
-<dependency>
-  <groupId>com.myorg.lsf</groupId>
-  <artifactId>lsf-observability-starter</artifactId>
-  <version>${lsf.version}</version>
-</dependency>
-
-<dependency>
-  <groupId>com.myorg.lsf</groupId>
-  <artifactId>lsf-kafka-admin-starter</artifactId>
-  <version>${lsf.version}</version>
-</dependency>
-
-<dependency>
-  <groupId>com.myorg.lsf</groupId>
-  <artifactId>lsf-outbox-admin-starter</artifactId>
-  <version>${lsf.version}</version>
-</dependency>
+```text
+ops/
+├─ monitoring/
+│  ├─ docker-compose.monitoring.yml
+│  ├─ prometheus/
+│  ├─ grafana/
+│  └─ alertmanager/
+└─ deployment/
+   ├─ README.md
+   ├─ validate.ps1
+   └─ helm/lsf-service/
 ```
 
-Nếu service cần export trace thật ra Zipkin, dùng thêm bridge tracing mà repo đã tương thích:
+## Monitoring stack
 
-```xml
-<dependency>
-  <groupId>io.micrometer</groupId>
-  <artifactId>micrometer-tracing-bridge-brave</artifactId>
-</dependency>
+| Thành phần | URL mặc định | Vai trò |
+|---|---|---|
+| Prometheus | `http://localhost:9090` | Scrape metrics từ Actuator |
+| Grafana | `http://localhost:3000` | Dashboard framework operations |
+| Alertmanager | `http://localhost:9093` | Alert baseline |
+| Zipkin | `http://localhost:9411` | Trace viewer |
 
-<dependency>
-  <groupId>io.zipkin.reporter2</groupId>
-  <artifactId>zipkin-reporter-brave</artifactId>
-</dependency>
+## Chạy local
+
+Khởi động infra chính ở root repo nếu cần:
+
+```bash
+docker compose up -d kafka schema-registry mysql redis zipkin
 ```
 
-## 2. Baseline config
+Khởi động monitoring stack:
+
+```bash
+docker compose -f ops/monitoring/docker-compose.monitoring.yml up -d
+```
+
+Service cần quan sát nên expose:
 
 ```yaml
 management:
@@ -57,72 +53,39 @@ management:
   tracing:
     sampling:
       probability: 1.0
-    zipkin:
-      tracing:
-        endpoint: http://localhost:9411/api/v2/spans
-
-lsf:
-  observability:
-    enabled: true
-    tracing-enabled: true
-
-  kafka:
-    admin:
-      enabled: true
-      allow-replay: true
-
-  outbox:
-    admin:
-      enabled: true
-      allow-retry: true
 ```
 
-## 3. Chạy local monitoring stack
+## Starter thường đi kèm
 
-1. Khởi động infra chính của repo:
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-observability-starter</artifactId>
+</dependency>
 
-```bash
-docker compose up -d kafka schema-registry mysql redis zipkin
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-kafka-admin-starter</artifactId>
+</dependency>
+
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-outbox-admin-starter</artifactId>
+</dependency>
 ```
 
-2. Khởi động monitoring stack ở thư mục `ops/monitoring`:
+## Playbook ngắn
 
-```bash
-docker compose -f ops/monitoring/docker-compose.monitoring.yml up -d
-```
+| Tình huống | Việc nên làm |
+|---|---|
+| DLQ tăng | Inspect qua `/lsf/kafka/dlq/records`, kiểm tra header lỗi và replay nếu an toàn |
+| Outbox pending tăng | Kiểm tra Kafka, scheduler, datasource và dùng outbox admin để requeue |
+| Event handler fail tăng | Đối chiếu `eventId`, `correlationId`, log MDC và Zipkin trace |
+| Metrics không xuất hiện | Kiểm tra Actuator exposure, Prometheus scrape config và network |
 
-3. Chạy service cần quan sát trên host và expose `http://localhost:<port>/actuator/prometheus`.
+## Lưu ý
 
-4. Mở:
-
-- Grafana: `http://localhost:3000`
-- Prometheus: `http://localhost:9090`
-- Alertmanager: `http://localhost:9093`
-- Zipkin: `http://localhost:9411`
-
-## 4. Assets đi kèm
-
-- Dashboard: `ops/monitoring/grafana/dashboards/lsf-framework-operations.json`
-- Datasource provisioning: `ops/monitoring/grafana/provisioning/datasources/prometheus.yml`
-- Dashboard provisioning: `ops/monitoring/grafana/provisioning/dashboards/dashboard.yml`
-- Prometheus scrape config: `ops/monitoring/prometheus/prometheus.yml`
-- Alert rules template: `ops/monitoring/prometheus/alerts/lsf-framework-alerts.yml`
-
-## 5. Playbook vận hành gợi ý
-
-- Nếu `lsf_kafka_dlq_total` tăng:
-  inspect record qua `GET /lsf/kafka/dlq/records?topic=<topic>.DLQ`
-- Nếu record là transient issue:
-  replay qua `POST /lsf/kafka/dlq/replay`
-- Nếu `lsf_outbox_pending` tăng liên tục:
-  kiểm tra outbox scheduler, Kafka availability, và dùng outbox admin để inspect/requeue
-- Nếu `lsf_event_handled_fail_total` tăng:
-  đối chiếu `traceId`, `corrId`, `requestId`, `eventId` trong log và Zipkin
-
-## 6. Khuyến nghị triển khai thực tế
-
-- Không expose các admin endpoint này ra public internet.
-- Bảo vệ `/lsf/kafka/**` và `/lsf/outbox/**` bằng internal auth hoặc admin-only role.
-- `allow-replay` chỉ nên bật ở internal environment hoặc service admin riêng.
-- Local/dev có thể sample trace 100%; môi trường lớn hơn nên giảm sampling theo traffic.
-- Dashboard/alert trong repo là baseline framework-level, không phải business monitoring suite.
+- Không expose `/lsf/kafka/**` hoặc `/lsf/outbox/**` ra public internet.
+- Dashboard/alert chỉ là baseline framework-level, chưa bao phủ business SLA.
+- Local/dev có thể trace sampling `1.0`; môi trường tải lớn nên giảm sampling.
+- Tài liệu deployment chi tiết nằm ở [deployment/README.md](deployment/README.md).

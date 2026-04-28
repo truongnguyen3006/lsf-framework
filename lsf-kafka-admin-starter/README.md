@@ -1,6 +1,15 @@
 # lsf-kafka-admin-starter
 
-Starter này cung cấp tooling nội bộ cho Kafka DLQ: liệt kê topic DLQ, inspect record, xem metadata gốc và replay có kiểm soát.
+> Starter cung cấp REST API nội bộ để inspect và replay Kafka DLQ records.
+
+Module này phục vụ vận hành và demo evidence: xem topic DLQ, đọc record lỗi, kiểm tra headers gốc và replay record sang target topic.
+
+## Dùng khi nào?
+
+- Service dùng `lsf-kafka-starter` với DLQ.
+- Cần xem nhanh record lỗi mà không mở Kafka CLI.
+- Cần replay single record sau khi sửa bug handler.
+- Cần surface cho frontend/admin evidence.
 
 ## Dependency
 
@@ -8,65 +17,47 @@ Starter này cung cấp tooling nội bộ cho Kafka DLQ: liệt kê topic DLQ, 
 <dependency>
   <groupId>com.myorg.lsf</groupId>
   <artifactId>lsf-kafka-admin-starter</artifactId>
-  <version>${lsf.version}</version>
 </dependency>
 ```
 
-## Cấu hình bật starter
+## Cấu hình mẫu
 
 ```yaml
 lsf:
   kafka:
     admin:
       enabled: true
-      base-path: /lsf/kafka
-      default-limit: 25
+      base-path: /admin/kafka
+      default-limit: 50
       max-limit: 200
       allow-replay: true
       dlq-suffix: .DLQ
       poll-timeout: 2s
 ```
 
-## Endpoints hiện có
+## Endpoints
 
-- `GET /lsf/kafka/dlq/topics`
-- `GET /lsf/kafka/dlq/records?topic=orders.DLQ&limit=20`
-- `GET /lsf/kafka/dlq/records?topic=orders.DLQ&partition=0&beforeOffset=200`
-- `GET /lsf/kafka/dlq/records/orders.DLQ/0/15`
-- `POST /lsf/kafka/dlq/replay`
+| Method | Path | Mục đích |
+|---|---|---|
+| `GET` | `/admin/kafka/dlq/topics` | Liệt kê DLQ topics |
+| `GET` | `/admin/kafka/dlq/records` | Đọc records theo topic/partition/limit |
+| `GET` | `/admin/kafka/dlq/records/{topic}/{partition}/{offset}` | Xem một record cụ thể |
+| `POST` | `/admin/kafka/dlq/replay` | Replay record sang topic đích |
 
-## Replay request example
+Payload replay:
 
 ```json
 {
-  "topic": "orders.DLQ",
+  "topic": "order-status-envelope-topic.DLQ",
   "partition": 0,
-  "offset": 15,
-  "targetTopic": "orders",
-  "retainDlqHeaders": false
+  "offset": 12,
+  "targetTopic": "order-status-envelope-topic",
+  "retainDlqHeaders": true
 }
 ```
 
-## Ghi chú thiết kế
+## Lưu ý bảo mật
 
-- Starter này tận dụng `ConsumerFactory`, `KafkaTemplate` và `AdminClient` hiện có trong application context.
-- Record replay sẽ gắn thêm các header:
-  - `lsf.replay.source.topic`
-  - `lsf.replay.source.partition`
-  - `lsf.replay.source.offset`
-  - `lsf.replay.replayed_at`
-- Replay có metric riêng qua `LsfKafkaReplayMetrics`.
-- `allow-replay` nên chỉ bật ở internal environment hoặc admin service riêng.
-
-## Validation hiện có
-
-- broker-backed Testcontainers regression để verify đọc DLQ records trên broker thật
-- verify single-record replay với source replay headers được gắn lại đúng
-- verify replay metrics cho đường thành công
-
-## Giới hạn hiện tại
-
-- Starter này không tự cung cấp auth/audit policy; adopter phải bảo vệ endpoint ở tầng security/network.
-- Luồng replay hiện tập trung vào single-record replay, chưa phải bulk remediation workflow.
-- Repo đã có broker-backed regression cho các path cốt lõi, nhưng chưa phải end-to-end remediation workflow đầy đủ cho mọi tình huống vận hành.
-- Auto-configuration tests vẫn có thể sinh warning khi không có local broker ở `localhost:9092`.
+- Đây là admin tool, không phải public API.
+- Replay có thể tạo duplicate event; handler downstream cần idempotent.
+- Nên bật `allow-replay=false` ở môi trường chỉ cho phép inspect.

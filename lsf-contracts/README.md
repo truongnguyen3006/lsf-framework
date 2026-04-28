@@ -1,53 +1,67 @@
 # lsf-contracts
 
-Module này chứa các hợp đồng dùng chung cho nhiều starter và nhiều service trong hệ LSF.
+> Module chứa các contract dùng chung cho toàn bộ LSF và các consumer service.
 
-## Vai trò trong framework
+`lsf-contracts` là lớp nền giúp các module khác nói cùng một ngôn ngữ: event envelope, trace/request context, header convention, retry classification, sync HTTP error và quota commands.
 
-`lsf-contracts` là lớp nền để các module khác cùng nói chung một “ngôn ngữ”:
+## Dùng khi nào?
 
-- `EventEnvelope` cho async event payload + metadata
-- `EnvelopeBuilder` để tạo envelope theo cùng convention
-- `CoreHeaders` cho canonical header names
-- `LsfRequestContext`, `LsfRequestContextHolder`, `LsfTraceContext`, `LsfTraceContextHolder`
-- `LsfRetryableException`, `LsfNonRetryableException`, `LsfRetryAware`, `LsfRetryDecisions`
-- `LsfErrorResponse` cho sync HTTP error model
-- quota command/result contracts trong package `contracts.quota`
+- Nhiều service cần thống nhất shape của event.
+- Service muốn dùng `EventEnvelope` để gói metadata và payload.
+- Module khác cần dùng chung `LsfErrorResponse`, `LsfRequestContext`, `CoreHeaders` hoặc quota command.
+- Consumer muốn tránh copy DTO hạ tầng giữa nhiều service.
 
-## Vì sao phần này thuộc framework
+## Dependency
 
-- Shared metadata và error model không nên bị định nghĩa khác nhau ở từng service.
-- Nhiều starter của repo cần dùng chung envelope, request context và retry classification để giữ hành vi nhất quán.
-- Tách contracts ra module riêng giúp adopter chỉ phụ thuộc vào phần model chung khi chưa cần toàn bộ runtime starter.
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-contracts</artifactId>
+</dependency>
+```
 
-## Cách service developer dùng module này
+## Thành phần chính
 
-### 1. Dùng `EventEnvelope` cho event-driven integration
+| Package | Nội dung |
+|---|---|
+| `core.envelope` | `EventEnvelope`, `EnvelopeBuilder`, `ErrorInfo` |
+| `core.context` | `LsfRequestContext`, `LsfTraceContext` và holder tương ứng |
+| `core.conventions` | `CoreHeaders`, `EventTypeFormat` |
+| `core.exception` | `LsfRetryableException`, `LsfNonRetryableException`, retry decisions |
+| `core.http` | `LsfErrorResponse` cho REST APIs |
+| `quota` | `ReserveQuotaCommand`, `ConfirmReservationCommand`, `ReleaseReservationCommand`, `QuotaReserveResult` |
+
+## EventEnvelope
+
+`EventEnvelope` giúp mọi event có metadata thống nhất:
 
 ```java
 EventEnvelope envelope = EnvelopeBuilder.wrap(
-        objectMapper,
-        "inventory.reserved.v1",
-        1,
-        reservationId,
-        correlationId,
-        causationId,
-        requestId,
-        "inventory-service",
-        payload
+    objectMapper,
+    "order.status.changed.v1",
+    1,
+    orderNumber,
+    correlationId,
+    causationId,
+    "order-service",
+    payload
 );
 ```
 
-### 2. Dùng `LsfErrorResponse` cho sync APIs
+Các metadata quan trọng gồm:
 
-`lsf-service-web-starter` và `lsf-http-client-starter` dùng record này để server và client cùng hiểu một JSON shape chung cho lỗi.
+- `eventId`
+- `eventType`
+- `version`
+- `aggregateId`
+- `correlationId`
+- `causationId`
+- `occurredAtMs`
+- `producer`
+- `payload`
 
-### 3. Dùng retry classification chung
+## Lưu ý thiết kế
 
-`lsf-resilience-starter`, `lsf-kafka-starter` và sync HTTP path đều có thể dựa vào `LsfRetryAware` hoặc các exception retryable/non-retryable để quyết định có retry hay không.
-
-## Giới hạn hiện tại
-
-- Module này không phải schema registry abstraction hay compatibility governance tool.
-- Nó không tự giải quyết version negotiation giữa các service.
-- Việc evolve contract giữa các team vẫn cần governance ở tầng adopter hoặc tổ chức sử dụng framework.
+- Module này nên giữ mỏng, ổn định và không phụ thuộc runtime nặng.
+- Không đặt business DTO riêng của một service vào đây nếu DTO đó không phải contract dùng chung.
+- Khi thay đổi `EventEnvelope` hoặc shared commands, cần cân nhắc backward compatibility cho consumer.

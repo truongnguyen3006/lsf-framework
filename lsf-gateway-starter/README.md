@@ -1,42 +1,62 @@
 # lsf-gateway-starter
 
-Starter này cung cấp gateway conventions tối thiểu trên nền Spring Cloud Gateway.
+> Starter bổ sung convention nhẹ cho Spring Cloud Gateway: route declaration và correlation/request id propagation.
 
-## Mục tiêu
+Module này phù hợp khi bạn muốn gateway của hệ LSF có cách khai báo route thống nhất, đồng thời tự sinh hoặc echo các header phục vụ tracing.
 
-- chuẩn hóa route declaration ở mức framework
-- thêm correlation id propagation mặc định
-- tránh biến Phase 1 thành một gateway product riêng
+## Dùng khi nào?
 
-## Những gì đang hỗ trợ
+- Hệ thống có API Gateway trên Spring Cloud Gateway.
+- Cần route request vào các service nội bộ theo convention đơn giản.
+- Muốn gateway luôn có `X-Correlation-Id` và request id để log/tracing dễ theo dõi.
 
-- route config qua `lsf.gateway.routes[*]`
-- fields chính: `id`, `path`, `uri`, `methods`, `strip-prefix`
-- add request/response headers theo route
-- `X-Correlation-Id` filter toàn cục
+## Dependency
 
-## Ví dụ cấu hình
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-gateway-starter</artifactId>
+</dependency>
+```
+
+## Cấu hình mẫu
 
 ```yaml
 lsf:
   gateway:
     enabled: true
+    correlation-header: X-Correlation-Id
+    generate-correlation-id: true
+    echo-correlation-id-response: true
+    generate-request-id: true
+    echo-request-id-response: true
     routes:
-      - id: inventory-api
-        path: /api/inventory/**
-        uri: http://localhost:8081
-        methods: [GET, POST]
-        strip-prefix: 1
+      - id: product-service
+        path: /api/product/**
+        uri: lb://product-service
+      - id: order-service
+        path: /api/order/**
+        uri: lb://order-service
 ```
 
-## Ghi chú thiết kế
+## Thuộc tính chính
 
-- Module này dựa trên Spring Cloud Gateway, không tự viết gateway runtime riêng.
-- Correlation id được giữ đơn giản để dễ debug local và liên kết log giữa gateway với downstream services.
-- Route API cố ý nhỏ, chỉ bao phủ phần thiết thực cho Phase 1.
+| Property | Ý nghĩa | Mặc định |
+|---|---|---|
+| `lsf.gateway.enabled` | Bật auto-configuration | `true` |
+| `lsf.gateway.correlation-header` | Header correlation id | `X-Correlation-Id` |
+| `lsf.gateway.generate-correlation-id` | Tự sinh correlation id nếu request chưa có | `true` |
+| `lsf.gateway.echo-correlation-id-response` | Ghi lại correlation id ra response | `true` |
+| `lsf.gateway.routes` | Danh sách route LSF | rỗng |
 
-## Giới hạn hiện tại
+## Cung cấp gì?
 
-- chưa có gateway security hardening riêng
-- chưa có rate-limit/filter chain theo route ở mức gateway
-- chưa có integration discovery-to-gateway routes tự động
+- `LsfCorrelationIdGlobalFilter`
+- Auto-configuration cho route convention
+- Hỗ trợ thêm request/response headers theo từng route
+- Tùy chọn `stripPrefix` cho route đơn giản
+
+## Lưu ý
+
+- Module này không thay thế toàn bộ cấu hình Spring Cloud Gateway gốc.
+- Với gateway production, vẫn cần cấu hình rate limit, CORS, security, timeout và observability theo nhu cầu riêng.

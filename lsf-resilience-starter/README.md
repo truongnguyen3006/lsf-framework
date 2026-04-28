@@ -1,63 +1,68 @@
 # lsf-resilience-starter
 
-Starter này gom các policy resilience nền tảng trên Resilience4j.
+> Starter gom các policy resilience nền tảng trên Resilience4j: retry, circuit breaker, timeout và rate limit.
 
-## Mục tiêu
+Module này cung cấp `LsfResilienceExecutor` và `LsfResiliencePolicyResolver` để các module khác, đặc biệt là `lsf-http-client-starter`, có thể áp dụng policy nhất quán khi gọi downstream.
 
-- cung cấp một baseline chung cho circuit breaker, retry, timeout và rate limit
-- giữ API đủ nhỏ để tái sử dụng ở nhiều loại integration khác nhau
-- tránh khóa framework vào một HTTP client cụ thể ở Phase 1
+## Dùng khi nào?
 
-## Những gì đang hỗ trợ
+- Service gọi downstream HTTP/gRPC/Kafka admin operation có thể lỗi tạm thời.
+- Muốn cấu hình default policy và override theo từng integration.
+- Muốn tránh copy retry/circuit breaker setup ở từng service.
 
-- `circuit-breaker`
-- `retry`
-- `timeout`
-- `rate-limit`
-- cấu hình theo từng instance qua `lsf.resilience.instances.<name>.*`
-- execution API qua `LsfResilienceExecutor`
+## Dependency
 
-## Ví dụ cấu hình
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-resilience-starter</artifactId>
+</dependency>
+```
+
+## Cấu hình mẫu
 
 ```yaml
 lsf:
   resilience:
+    enabled: true
+    defaults:
+      retry:
+        enabled: true
+        max-attempts: 3
+        wait-duration: 200ms
+      timeout:
+        enabled: true
+        duration: 2s
+      circuit-breaker:
+        enabled: true
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
     instances:
-      inventory-call:
-        circuit-breaker:
-          enabled: true
-          sliding-window-size: 20
+      inventory-client:
         retry:
-          enabled: true
-          max-attempts: 3
-          wait-duration: 200ms
+          max-attempts: 2
         timeout:
-          enabled: true
-          duration: 2s
-        rate-limit:
-          enabled: true
-          limit-for-period: 50
-          limit-refresh-period: 1s
+          duration: 1s
 ```
+
+## Thành phần chính
+
+| Class | Vai trò |
+|---|---|
+| `LsfResilienceExecutor` | Bọc execution bằng policy đã resolve |
+| `LsfResiliencePolicyResolver` | Tìm policy theo `resilienceId`, fallback về defaults |
+| `LsfResilienceComponents` | Giữ các registry/component Resilience4j |
+| `LsfResilienceProperties` | Binding namespace `lsf.resilience` |
 
 ## Ví dụ sử dụng
 
 ```java
-String value = resilienceExecutor.execute("inventory-call", () -> downstreamCall());
+String result = executor.execute("inventory-client", () -> inventoryGateway.call());
 ```
 
-## Ghi chú thiết kế
+## Lưu ý
 
-- Đây là reusable execution layer; Phase 3 gắn nó vào `lsf-http-client-starter` thay vì nhúng policy logic trực tiếp vào client code.
-- Policy resolver hỗ trợ defaults và override theo instance.
-- Module này được thiết kế để Phase sau có thể gắn vào HTTP client/gRPC client mà không phải thay core policy model.
-
-## Validation hiện có
-
-- focused tests cho retry, circuit breaker, timeout, rate limit và non-retryable classification
-- cross-module runtime integration test với `lsf-http-client-starter` + `lsf-service-web-starter` + `lsf-security-starter` để verify retry chỉ lặp lại khi downstream trả lỗi `retryable=true` và dừng ngay với non-retryable response
-
-## Giới hạn hiện tại
-
-- classification hiện tại dựa trên `LsfRetryAware` và mapping của integration layer, chưa phải một policy DSL quá chi tiết
-- chưa có observability bridge sâu cho từng policy event
+- Resilience không thay thế idempotency. Với operation có side effect, cần thiết kế retry an toàn.
+- Timeout quá ngắn có thể tạo false failure khi hệ thống đang tải cao.
+- Nên đặt policy riêng cho các downstream quan trọng thay vì dùng default cho mọi thứ.

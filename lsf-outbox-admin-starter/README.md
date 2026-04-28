@@ -1,6 +1,14 @@
 # lsf-outbox-admin-starter
 
-Starter này cung cấp REST API để vận hành outbox ở mức framework: list/filter rows, inspect theo id hoặc event id, requeue, mark failed và delete có kiểm soát.
+> Starter cung cấp REST API nội bộ để vận hành outbox: list, inspect, requeue, mark failed và delete có kiểm soát.
+
+Module này giúp demo/vận hành nhìn thấy trạng thái outbox mà không phải truy vấn database thủ công.
+
+## Dùng khi nào?
+
+- Service đã bật outbox runtime và cần admin surface.
+- Cần kiểm tra event pending/retry/failed khi demo hoặc debug.
+- Cần requeue event lỗi sau khi fix nguyên nhân.
 
 ## Dependency
 
@@ -8,64 +16,42 @@ Starter này cung cấp REST API để vận hành outbox ở mức framework: l
 <dependency>
   <groupId>com.myorg.lsf</groupId>
   <artifactId>lsf-outbox-admin-starter</artifactId>
-  <version>${lsf.version}</version>
 </dependency>
 ```
 
-## Cấu hình bật starter
+## Cấu hình mẫu
 
 ```yaml
 lsf:
   outbox:
     admin:
       enabled: true
-      base-path: /lsf/outbox
+      base-path: /admin/outbox
       default-limit: 50
       max-limit: 200
       allow-retry: true
       allow-delete: false
 ```
 
-## Endpoints hiện có
+## Endpoints
 
-- `GET /lsf/outbox`
-- `GET /lsf/outbox/{id}`
-- `GET /lsf/outbox/event/{eventId}`
-- `POST /lsf/outbox/requeue/event/{eventId}?mode=RETRY&resetRetry=true`
-- `POST /lsf/outbox/requeue/failed?limit=50&resetRetry=true`
-- `POST /lsf/outbox/mark-failed/event/{eventId}`
-- `DELETE /lsf/outbox/event/{eventId}`
+| Method | Path | Mục đích |
+|---|---|---|
+| `GET` | `/admin/outbox` | List rows, filter theo status/topic/msgKey/eventType/correlationId/from/to |
+| `GET` | `/admin/outbox/{id}` | Xem row theo id |
+| `GET` | `/admin/outbox/event/{eventId}` | Xem row theo event id |
+| `POST` | `/admin/outbox/requeue/event/{eventId}` | Requeue một event |
+| `POST` | `/admin/outbox/requeue/failed` | Requeue nhiều failed rows |
+| `POST` | `/admin/outbox/mark-failed/event/{eventId}` | Mark một event là failed |
+| `DELETE` | `/admin/outbox/event/{eventId}` | Xóa event nếu `allow-delete=true` |
 
-`GET /lsf/outbox` hiện hỗ trợ filter theo:
+## Lưu ý bảo mật
 
-- `status`
-- `topic`
-- `msgKey`
-- `eventType`
-- `correlationId`
-- `from`
-- `to`
-- `limit`
-- `offset`
+- Không expose admin endpoint công khai.
+- Nên dùng `lsf-security-starter`, gateway rule hoặc network policy để khóa endpoint.
+- `allow-delete=false` là mặc định an toàn; chỉ bật khi có quy trình vận hành rõ ràng.
 
-## Ghi chú thiết kế
+## Trạng thái
 
-- `allow-delete=false` theo mặc định để tránh xóa nhầm dữ liệu vận hành.
-- `allow-retry=false` có thể dùng khi chỉ muốn inspect chứ chưa cho phép operator requeue.
-- Repository hiện dùng JDBC và bám theo schema outbox của runtime modules.
-
-## Validation hiện có
-
-- vendor-specific MySQL/PostgreSQL regression cho các path DB-sensitive ở repository/service
-- suite mới verify list/filter, inspect theo id hoặc event id, requeue failed, mark failed và delete guardrails
-- migration được dùng lại từ các runtime modules để tránh drift schema giữa runtime và admin tooling
-
-## Khuyến nghị sử dụng
-
-- Chỉ expose endpoint này trên internal network hoặc sau auth/admin role.
-- Dùng nó như tooling hỗ trợ điều tra và remediation, không phải thay thế monitoring hay playbook vận hành đầy đủ.
-
-## Giới hạn hiện tại
-
-- module này tập trung vào outbox rows hiện có; chưa có bulk workflow hay dashboard UI đi kèm
-- vendor-specific regression hiện tập trung vào repository/service path trọng yếu, chưa phải full container-backed coverage cho mọi controller path
+- Có regression cho MySQL/PostgreSQL ở mức framework.
+- Phù hợp làm evidence/admin tool cho đồ án và môi trường nội bộ.

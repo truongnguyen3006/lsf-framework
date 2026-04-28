@@ -1,136 +1,114 @@
 # lsf-example
 
-`lsf-example` là application minh họa cách nhiều module LSF phối hợp với nhau trong một service đơn giản. Module này không nhằm thay thế consumer project thật như `ecommerce-backend`, nhưng rất hữu ích khi cần demo nhanh các capability cốt lõi của framework mà không phải khởi động cả hệ nhiều service.
+> Ứng dụng demo nhỏ để minh họa cách nhiều module LSF phối hợp trong một Spring Boot service.
 
-## Module này đang chứng minh điều gì
+`lsf-example` không phải ecommerce consumer hoàn chỉnh. Module này dùng để chạy nhanh các capability cốt lõi của framework như event envelope, handler dispatch, retry/DLQ, quota/reservation, flash-sale reservation và outbox append.
 
-- publish/consume event theo `EventEnvelope`
-- retry và DLQ flow qua Kafka
-- idempotency cho event handler
-- reliable publishing bằng outbox MySQL
-- quota/reservation theo `reserve -> confirm -> release`
-- một business demo gần với thực tế hơn qua flash-sale reservation
-- metrics, tracing và actuator để quan sát runtime
+## Demo được những gì?
 
-`lsf-example` phù hợp để minh họa framework capability. Nó không phải production blueprint hoàn chỉnh và cũng không nên được dùng làm bằng chứng thay cho consumer integration nhiều service.
+| Capability | Module liên quan | Ý nghĩa |
+|---|---|---|
+| Publish/consume envelope event | `lsf-kafka-starter`, `lsf-eventing-starter` | Gửi payload và xử lý bằng `@LsfEventHandler` |
+| Retry/DLQ | `lsf-kafka-starter` | Đẩy event lỗi sang DLQ |
+| Idempotent dispatch | `lsf-eventing-starter` | Tránh xử lý trùng event |
+| Quota/reservation | `lsf-quota-starter` | Reserve/confirm/release tài nguyên |
+| Flash-sale demo | `lsf-quota-starter` | Minh họa anti-oversell |
+| Outbox append | `lsf-outbox-core`, runtime outbox | Append envelope vào outbox table |
 
-## Dependency baseline
+## Yêu cầu
 
-Module hiện dùng các starter và library chính sau:
+- JDK 21
+- Maven
+- Docker nếu chạy Kafka, Redis, MySQL, Schema Registry
 
-- `lsf-contracts`
-- `lsf-kafka-starter`
-- `lsf-eventing-starter`
-- `lsf-observability-starter`
-- `lsf-outbox-mysql-starter`
-- `lsf-outbox-admin-starter`
-- `lsf-quota-streams-starter`
+## Chạy nhanh
 
-Profile mặc định của app là `outbox-mysql`.
+Từ root repo:
 
-## Cách chạy nhanh
+```bash
+cd D:\IdeaProjects\lsf-parent
+mvn -pl lsf-example -am spring-boot:run
+```
 
-### 1. Khởi động hạ tầng tối thiểu từ repo framework
-
-Tại thư mục gốc `D:\IdeaProjects\lsf-parent-fixed`:
+Nếu cần hạ tầng local:
 
 ```bash
 docker compose up -d kafka schema-registry mysql redis zipkin
 ```
 
-Nếu muốn chạy cả app container hóa:
+Chạy với profile Docker:
 
 ```bash
-docker compose --profile apps up --build
+mvn -pl lsf-example -am spring-boot:run -Dspring-boot.run.profiles=docker
 ```
 
-### 2. Chạy app từ Maven
+Chạy với profile outbox MySQL:
 
 ```bash
-mvn -pl lsf-example spring-boot:run
+mvn -pl lsf-example -am spring-boot:run -Dspring-boot.run.profiles=outbox-mysql
 ```
 
-App mặc định chạy tại:
+## Endpoint demo
 
-- `http://localhost:8080`
+| Method | Path | Mục đích |
+|---|---|---|
+| `POST` | `/send` | Publish event demo |
+| `POST` | `/send-dup` | Gửi duplicate để kiểm tra idempotency |
+| `POST` | `/send-fail` | Gửi event làm handler fail để kiểm tra retry/DLQ |
+| `POST` | `/send-unknown` | Gửi event type chưa có handler |
+| `POST` | `/quota/reserve` | Reserve quota bằng query/body đơn giản |
+| `POST` | `/quota/confirm` | Confirm reservation |
+| `POST` | `/quota/release` | Release reservation |
+| `POST` | `/demo/flash-sale/orders/reserve` | Reserve một order flash sale |
+| `POST` | `/demo/flash-sale/orders/{orderId}/confirm` | Confirm order flash sale |
+| `POST` | `/demo/flash-sale/orders/{orderId}/release` | Release order flash sale |
+| `GET` | `/demo/flash-sale/orders/{orderId}` | Xem trạng thái order demo |
+| `POST` | `/outbox/append` | Append envelope vào outbox nếu bật outbox |
 
-## Endpoint demo chính
+## Cấu hình đáng chú ý
 
-### Eventing / retry / DLQ
+Các file cấu hình chính:
 
-- `POST /send`
-- `POST /send-dup?eventId=E1`
-- `POST /send-fail?eventId=FAIL_E1`
-- `POST /send-unknown?eventType=demo.unknown.v1`
-- `POST /send-one?eventId=E2`
+```text
+src/main/resources/
+├─ application.yml
+├─ application-docker.yml
+└─ application-outbox-mysql.yml
+```
 
-### Outbox
+Ví dụ các namespace thường gặp:
 
-- `POST /outbox/append?eventId=E_OUTBOX_1`
+```yaml
+lsf:
+  kafka:
+    bootstrap-servers: localhost:9092
+    schema-registry-url: http://localhost:8081
+  eventing:
+    consume-topics:
+      - demo-envelope-topic
+  quota:
+    enabled: true
+    store: REDIS
+  outbox:
+    enabled: true
+```
 
-### Quota API
+## Cấu trúc module
 
-- `POST /quota/reserve`
-- `POST /quota/confirm`
-- `POST /quota/release`
-- `POST /quota/reserve-json`
-- `POST /quota/confirm-json`
-- `POST /quota/release-json`
+```text
+lsf-example/
+├─ src/main/java/com/demo/app/
+│  ├─ DemoAppApplication.java
+│  ├─ DemoHandlers.java
+│  ├─ TestController.java
+│  ├─ DemoQuotaController.java
+│  ├─ OutboxSampleController.java
+│  └─ flashsale/
+└─ src/main/resources/
+```
 
-### Flash sale demo
+## Lưu ý
 
-- `POST /demo/flash-sale/orders/reserve`
-- `POST /demo/flash-sale/orders/{orderId}/confirm`
-- `POST /demo/flash-sale/orders/{orderId}/release`
-- `GET /demo/flash-sale/orders/{orderId}`
-
-### Quan sát runtime
-
-- `GET /actuator/health`
-- `GET /actuator/prometheus`
-
-## Kịch bản demo gợi ý
-
-### 1. Eventing happy path
-
-1. Gọi `POST /send`
-2. Kiểm tra log handler và metrics
-3. Mở `actuator/prometheus` để xem counter liên quan dispatcher
-
-### 2. Duplicate event / idempotency
-
-1. Gọi `POST /send-dup?eventId=E_DEMO_DUP_1`
-2. Kiểm tra chỉ một logical event được chấp nhận theo store idempotency
-
-### 3. Retry và DLQ
-
-1. Gọi `POST /send-fail?eventId=FAIL_DEMO_1`
-2. Quan sát retry
-3. Kiểm tra record ở topic `.DLQ`
-
-### 4. Outbox append và background publish
-
-1. Gọi `POST /outbox/append?eventId=E_OUTBOX_DEMO_1`
-2. Kiểm tra row outbox được append
-3. Theo dõi trạng thái publisher và metrics
-
-### 5. Flash-sale reservation
-
-1. Gọi `POST /demo/flash-sale/orders/reserve`
-2. Xác nhận một order
-3. Release một order khác
-4. Dùng `GET /demo/flash-sale/orders/{orderId}` để đối chiếu trạng thái
-
-Chi tiết flow flash-sale được mô tả thêm tại [FLASH_SALE_QUOTA_DEMO.md](FLASH_SALE_QUOTA_DEMO.md).
-
-## Ghi chú về kiểm thử
-
-- Module có integration tests với Kafka, Redis, MySQL và Testcontainers.
-- Một số bài test yêu cầu Docker khả dụng; nếu máy không có Docker hoặc container runtime hợp lệ, `mvn test` có thể fail dù code vẫn build/compile bình thường.
-- `lsf-example` nên được dùng như example runtime có kiểm soát, không phải bằng chứng production-ready cho toàn bộ framework.
-
-## Quan hệ với các module khác
-
-- Nếu cần xem cách tạo service mới từ skeleton, dùng [lsf-service-template](../lsf-service-template/README.md).
-- Nếu cần xem mức trưởng thành từng module trong toàn framework, xem [docs/MODULE_MATURITY.md](../docs/MODULE_MATURITY.md).
-- Nếu cần hiểu capability nào là core, capability nào mới ở mức partial support, xem [docs/PLATFORM_ADOPTION.md](../docs/PLATFORM_ADOPTION.md).
+- Đây là demo framework, không phải service production.
+- Nếu Kafka/Redis/MySQL chưa chạy, một số endpoint hoặc profile sẽ lỗi.
+- Với consumer thực tế hơn, xem thêm `D:\IdeaProjects\ecommerce-backend`.

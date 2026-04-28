@@ -1,12 +1,14 @@
 # lsf-service-web-starter
 
-Starter này cung cấp servlet conventions cho synchronous HTTP trong Phase 3.
+> Starter chuẩn hóa HTTP ingress cho servlet service: request context, trace headers và error response.
 
-## Mục tiêu
+Module này giúp REST service nội bộ có cùng cách nhận/ghi header, sinh correlation id/request id và trả lỗi dạng `LsfErrorResponse`.
 
-- chuẩn hóa request context cho `correlation-id`, `causation-id`, `request-id`
-- chuẩn hóa error response cho sync APIs giữa các service
-- giảm việc mỗi service tự viết filter, controller advice, và security error body riêng
+## Dùng khi nào?
+
+- Service exposes REST API nội bộ hoặc public API cần format lỗi thống nhất.
+- Cần propagate `correlation-id`, `causation-id`, `request-id` qua nhiều service.
+- Muốn giảm boilerplate `@ControllerAdvice` và filter hạ tầng.
 
 ## Dependency
 
@@ -14,26 +16,10 @@ Starter này cung cấp servlet conventions cho synchronous HTTP trong Phase 3.
 <dependency>
   <groupId>com.myorg.lsf</groupId>
   <artifactId>lsf-service-web-starter</artifactId>
-  <version>${lsf.version}</version>
 </dependency>
 ```
 
-## Những gì đang hỗ trợ
-
-- filter cho servlet requests:
-  - đọc canonical headers `correlation-id`, `causation-id`, `request-id`
-  - chấp nhận legacy aliases `lsf-*` và `X-Correlation-Id`
-  - tự generate `correlation-id` / `request-id` nếu cần
-- request context chung qua `LsfRequestContext` và `LsfRequestContextHolder`
-- response header echo cho canonical headers
-- `LsfErrorResponse` cho:
-  - validation / bad request
-  - `LsfRetryableException` / `LsfNonRetryableException`
-  - timeout / circuit open / rate limit
-  - generic 5xx fallback
-- 401/403 từ `lsf-security-starter` cũng có thể dùng cùng error model
-
-## Cấu hình cơ bản
+## Cấu hình mẫu
 
 ```yaml
 lsf:
@@ -45,41 +31,30 @@ lsf:
       echo-headers: true
 ```
 
-## Ví dụ error response
+## Cung cấp gì?
+
+| Class | Vai trò |
+|---|---|
+| `LsfRequestContextFilter` | Đọc/sinh request context và bind vào holder |
+| `LsfHttpExceptionHandler` | Chuyển exception thành `LsfErrorResponse` |
+| `LsfErrorResponseFactory` | Tạo error body thống nhất |
+| `LsfErrorResponseWriter` | Ghi error body trong filter/security flow |
+
+## Response lỗi mẫu
 
 ```json
 {
-  "timestamp": "2026-04-06T14:59:27.666829Z",
-  "status": 400,
-  "error": "Bad Request",
-  "code": "BAD_REQUEST",
-  "message": "Request is invalid",
-  "path": "/internal/orders",
-  "retryable": false,
-  "service": "order-service",
-  "correlationId": "corr-123",
-  "causationId": "evt-456",
-  "requestId": "req-789",
-  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736"
+  "timestamp": "2026-04-28T10:15:30Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Resource not found",
+  "path": "/api/order/ORD-001",
+  "correlationId": "8c6f..."
 }
 ```
 
-## Ghi chú thiết kế
+## Lưu ý
 
-- Module này là **servlet-first**, không cố tự thay thế Spring MVC error handling.
-- Header convention giữ canonical names cho sync HTTP, nhưng vẫn nhận aliases cũ để tương thích ngược.
-- `LsfErrorResponse` được đặt ở `lsf-contracts` để client/server dùng chung cùng JSON shape.
-
-## Validation hiện có
-
-- MockMvc integration tests cho canonical/legacy headers, generated IDs và `LsfErrorResponse`
-- cross-module runtime integration test với `lsf-http-client-starter` + `lsf-security-starter` + `lsf-resilience-starter` để verify:
-  - request context đi qua HTTP client thật
-  - security error model và business error model dùng chung `LsfErrorResponse`
-  - retryable/non-retryable semantics giữ nguyên khi downstream gọi qua `RestClient` proxy
-
-## Giới hạn hiện tại
-
-- chưa có reactive/WebFlux runtime tương đương
-- chưa bridge sang gRPC metadata conventions
-- chưa có field-level validation payload phong phú kiểu full `ProblemDetail` extension catalog
+- Module này tập trung vào servlet stack (`spring-boot-starter-web`).
+- Với WebFlux gateway, dùng cấu hình riêng hoặc `lsf-gateway-starter`.
+- Nên dùng kèm `lsf-http-client-starter` để context được propagate khi gọi downstream.

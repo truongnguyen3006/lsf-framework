@@ -1,63 +1,39 @@
-# lsf-quota-streams-starter
+# lsf-quota-starter
 
-Module này đóng gói bài toán **quota / reservation** cho các tình huống large-scale như:
-- flash sale / oversell control
-- booking / giữ chỗ tạm thời
-- đăng ký học phần / slot giới hạn
-- inventory hold trước khi thanh toán hoàn tất
+> Starter triển khai quota/reservation workflow cho tài nguyên hữu hạn: `reserve -> confirm -> release`.
 
-## Module giải quyết vấn đề gì?
+Module này giải quyết các bài toán như flash sale, inventory hold, booking slot hoặc coupon cap, nơi nhiều request cùng tranh chấp một giới hạn tài nguyên.
 
-Trong hệ microservices lớn, nhiều request có thể cùng lúc tranh chấp một tài nguyên giới hạn. Nếu chỉ dùng CRUD đơn giản thì rất dễ gặp:
-- oversell / overbooking
-- giữ chỗ nhưng không tự hết hạn
-- xử lý trùng request
-- logic reserve / confirm / release không thống nhất giữa các service
+## Dùng khi nào?
 
-Starter này chuẩn hóa lại flow quota theo 3 thao tác:
-- `reserve(quotaKey, requestId, amount)`
-- `confirm(quotaKey, requestId)`
-- `release(quotaKey, requestId)`
+- Cần tránh oversell/overbooking.
+- Cần giữ tài nguyên tạm thời trong lúc chờ thanh toán/xác nhận.
+- Cần release reservation khi workflow thất bại hoặc timeout.
+- Cần chạy multi-instance với Redis-backed quota state.
 
-## Hai lớp chính
+## Dependency
 
-### 1. `QuotaReservationFacade`
-Facade ở tầng business. Nhiệm vụ của nó là:
-- lấy policy theo `quotaKey`
-- áp `limit` + `hold`
-- gọi `QuotaService` backend
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-quota-starter</artifactId>
+</dependency>
+```
 
-### 2. `QuotaService`
-Backend thực thi quota:
-- `MemoryQuotaService`: phù hợp dev/test hoặc single-instance
-- `RedisQuotaService`: phù hợp multi-instance / distributed runtime
-
-## Policy provider
-
-Starter hỗ trợ 3 cách cấp policy:
-- `STATIC`: đọc từ `lsf.quota.policies` trong YAML
-- `JDBC`: đọc từ bảng `quota_policy`
-- `AUTO`: ưu tiên JDBC nếu có `JdbcTemplate`, không thì fallback STATIC
-
-Ngoài ra policy có thể cache bằng:
-- `NONE`
-- `MEMORY`
-- `REDIS`
-- `MEMORY_REDIS`
-
-## Cấu hình ví dụ
+## Cấu hình mẫu
 
 ```yaml
 lsf:
   quota:
     enabled: true
-    store: redis
-    key-prefix: "lsf:quota:"
+    store: REDIS
+    key-prefix: lsf:quota:
     default-hold-seconds: 30
     keep-alive-seconds: 86400
     allow-release-confirmed: false
+    metrics-enabled: true
     provider:
-      mode: JDBC
+      mode: AUTO
       jdbc:
         table: quota_policy
         enabled-only: true
@@ -65,44 +41,61 @@ lsf:
         mode: MEMORY_REDIS
         ttl-seconds: 30
         local-max-size: 10000
-        redis-prefix: "lsf:quota:policy:"
+        redis-prefix: lsf:quota:policy:
 ```
 
-## Bảng JDBC mẫu
+Static policy:
+
+```yaml
+lsf:
+  quota:
+    policies:
+      - key: shopA:sku:NIK1-WHITE-38
+        limit: 100
+        hold-seconds: 120
+```
+
+## API chính
+
+```java
+QuotaResult result = quotaService.reserve(
+    QuotaRequest.builder()
+        .quotaKey("shopA:sku:NIK1-WHITE-38")
+        .requestId("order-1001:NIK1-WHITE-38")
+        .amount(2)
+        .limit(100)
+        .hold(Duration.ofSeconds(120))
+        .build()
+);
+
+quotaService.confirm("shopA:sku:NIK1-WHITE-38", "order-1001:NIK1-WHITE-38");
+quotaService.release("shopA:sku:NIK1-WHITE-38", "order-1001:NIK1-WHITE-38");
+```
+
+## Thành phần chính
+
+| Class | Vai trò |
+|---|---|
+| `QuotaService` | API reserve/confirm/release |
+| `QuotaReservationFacade` | Facade lấy policy rồi gọi backend |
+| `MemoryQuotaService` | State in-memory cho dev/test |
+| `RedisQuotaService` | State Redis cho multi-instance |
+| `QuotaPolicyProvider` | Nguồn policy static/JDBC/cache |
+| `QuotaMetrics` | Metrics cho reserve/confirm/release |
+
+## Bảng policy JDBC mẫu
 
 ```sql
 CREATE TABLE quota_policy (
-  quota_key     VARCHAR(255) PRIMARY KEY,
-  quota_limit   INT NOT NULL,
-  hold_seconds  INT NULL,
-  enabled       TINYINT NOT NULL DEFAULT 1
+  quota_key VARCHAR(255) PRIMARY KEY,
+  quota_limit INT NOT NULL,
+  hold_seconds INT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1
 );
 ```
 
-## Bộ test được thêm trong lần hoàn thiện này
+## Lưu ý
 
-- `MemoryQuotaServiceTest`
-  - flow reserve / duplicate / confirm / release
-  - timeout reservation
-  - release confirmed theo config
-  - concurrent reserve không vượt limit
-- `RedisQuotaServiceTest`
-  - kiểm tra đúng hành vi với Redis thật qua Testcontainers
-- `StaticQuotaPolicyProviderTest`
-  - policy tĩnh + fallback default hold
-- `JdbcQuotaPolicyProviderTest`
-  - đọc policy từ DB + enabled-only + default hold
-- `CachingQuotaPolicyProviderTest`
-  - cache hit + negative cache + TTL expire
-- `QuotaReservationFacadeImplTest`
-  - facade truyền đúng limit / hold xuống backend
-- `QuotaAutoConfigurationTest`
-  - kiểm tra auto-config cho memory / fail-fast Redis / fail-fast JDBC
-
-## Ý nghĩa demo
-
-Nếu tích hợp vào ecommerce hoặc booking, bạn có thể demo như sau:
-1. Order Service gọi `reserve` để giữ tạm tồn kho.
-2. Nếu thanh toán thành công thì gọi `confirm`.
-3. Nếu thanh toán lỗi / timeout thì gọi `release`.
-4. Với Redis backend, nhiều instance vẫn dùng chung trạng thái quota và tránh oversell tốt hơn.
+- `requestId` nên ổn định theo business action để duplicate reserve không làm tăng used quota.
+- Redis store phù hợp hệ nhiều instance; memory store không chia sẻ state giữa instances.
+- `allow-release-confirmed=false` giúp tránh rollback nhầm reservation đã confirm.

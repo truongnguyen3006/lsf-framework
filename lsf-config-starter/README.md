@@ -1,49 +1,85 @@
 # lsf-config-starter
 
-Starter này chuẩn hóa cách bật centralized configuration cho service dùng LSF.
+> Starter chuẩn hóa cách service LSF nạp cấu hình từ local folder hoặc Spring Config Server.
 
-## Mục tiêu
+Module này giải quyết phần bootstrap cấu hình sớm trong vòng đời Spring Boot. Thay vì mỗi service tự viết lại `spring.config.import`, `lsf-config-starter` cung cấp một convention chung qua namespace `lsf.config`.
 
-- gom các mode cấu hình tập trung phổ biến vào một convention chung
-- thiết lập `spring.config.import` đủ sớm trong vòng đời Spring Boot
-- giữ đường dùng local/container-friendly thay vì buộc mọi adopter phải có config server riêng
+## Dùng khi nào?
 
-## Những gì starter đang hỗ trợ
+- Service cần đọc cấu hình từ file/folder local như `./config/`.
+- Service cần kết nối Spring Config Server.
+- Dự án muốn thống nhất cách bật/tắt config import giữa local, dev và demo.
+- Team muốn tránh việc mỗi service tự xử lý config import theo cách khác nhau.
 
-- `lsf.config.mode=NONE|FILE|CONFIGTREE|CONFIG_SERVER`
-- bootstrap import qua `EnvironmentPostProcessor`
-- map sang `spring.cloud.config.*` khi dùng `CONFIG_SERVER`
-- validation sớm cho các trường hợp cần `spring.application.name`
+## Dependency
 
-## Cấu hình ví dụ
-
-### Dùng local file/config tree
-
-```properties
-lsf.config.enabled=true
-lsf.config.mode=CONFIGTREE
-lsf.config.import-location=./config/
-lsf.config.optional=true
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-config-starter</artifactId>
+</dependency>
 ```
 
-### Dùng Spring Cloud Config Server
+## Cấu hình mẫu
 
-```properties
-lsf.config.enabled=true
-lsf.config.mode=CONFIG_SERVER
-lsf.config.config-server.uri=http://localhost:8888
-lsf.config.config-server.fail-fast=true
-spring.application.name=inventory-service
+Nạp cấu hình từ file hoặc folder local:
+
+```yaml
+lsf:
+  config:
+    enabled: true
+    mode: FILE
+    import-location: ./config/
+    optional: true
 ```
 
-## Ghi chú thiết kế
+Nạp theo config tree, phù hợp khi mount config/secret dạng thư mục:
 
-- Vì `spring.config.import` được xử lý rất sớm, các khóa `lsf.config.*` nên được cấp qua environment variables, system properties, command line hoặc bootstrap properties có sẵn từ đầu tiến trình.
-- `FILE` và `CONFIGTREE` phù hợp hơn cho local/dev/container runtime đơn giản.
-- Starter này tận dụng Spring Cloud Config khi cần, không tự re-implement config server.
+```yaml
+lsf:
+  config:
+    enabled: true
+    mode: CONFIGTREE
+    import-location: /etc/config/
+    optional: true
+```
 
-## Giới hạn hiện tại
+Nạp từ Config Server:
 
-- chưa có refresh/reload abstraction riêng của framework
-- chưa có encryption/secret rotation abstraction
-- chưa có governance layer cho config versioning
+```yaml
+lsf:
+  config:
+    enabled: true
+    mode: CONFIG_SERVER
+    config-server:
+      uri: http://localhost:8888
+      fail-fast: false
+      label: main
+```
+
+## Thuộc tính chính
+
+| Property | Ý nghĩa | Mặc định |
+|---|---|---|
+| `lsf.config.enabled` | Bật cơ chế config import của LSF | `false` |
+| `lsf.config.mode` | Chế độ nạp cấu hình: `NONE`, `FILE`, `CONFIGTREE`, `CONFIG_SERVER` | `NONE` |
+| `lsf.config.import-location` | Vị trí folder/file config local | `./config/` |
+| `lsf.config.optional` | Cho phép app chạy nếu config ngoài chưa có | `true` |
+| `lsf.config.config-server.uri` | URL Spring Config Server | `http://localhost:8888` |
+| `lsf.config.config-server.fail-fast` | Fail ngay khi Config Server không sẵn sàng | `false` |
+
+## Cấu trúc module
+
+```text
+lsf-config-starter/
+├─ LsfConfigProperties.java
+├─ LsfConfigAutoConfiguration.java
+├─ LsfConfigBootstrapEnvironmentPostProcessor.java
+└─ LsfConfigImportSupport.java
+```
+
+## Lưu ý
+
+- Module này không triển khai Config Server, chỉ chuẩn hóa cách service consume cấu hình.
+- `enabled=false` là mặc định để tránh làm thay đổi hành vi service khi chỉ thêm dependency.
+- Với production, nên quản lý secret bằng secret manager hoặc biến môi trường thay vì commit trực tiếp vào file config.

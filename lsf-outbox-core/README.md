@@ -1,38 +1,61 @@
 # lsf-outbox-core
 
-Module này cung cấp abstraction cốt lõi cho outbox trong LSF, tách khỏi chi tiết của MySQL hay PostgreSQL.
+> Module core cho outbox pattern, tách API chung khỏi runtime MySQL/PostgreSQL.
 
-## Vai trò trong framework
+Outbox pattern giúp tránh lỗi dual-write: database đã commit nhưng publish Kafka thất bại, hoặc publish thành công nhưng database rollback. `lsf-outbox-core` cung cấp API chung để service append event vào outbox trong cùng transaction business.
 
-`lsf-outbox-core` hiện giữ hai phần chính:
+## Dùng khi nào?
 
-- `OutboxWriter`: API chung để append `EventEnvelope` vào outbox trong cùng transaction với business data
-- `OutboxSql`: helper validate table identifier an toàn trước khi các runtime module ghép tên bảng vào SQL
+- Service cần publish event sau khi cập nhật database.
+- Muốn code business không phụ thuộc trực tiếp vào MySQL/PostgreSQL runtime.
+- Muốn giữ API `OutboxWriter` ổn định khi đổi runtime database.
 
-## Vì sao phần này thuộc framework
+## Dependency
 
-- Outbox là concern cross-cutting, nhưng implementation chi tiết lại phụ thuộc database.
-- Tách core abstraction ra module riêng giúp service code không phải gắn chặt với MySQL hay PostgreSQL runtime.
-- Các runtime như `lsf-outbox-mysql-starter` và `lsf-outbox-postgres-starter` có thể cùng dựa vào một interface chung.
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-outbox-core</artifactId>
+</dependency>
+```
 
-## Cách service developer dùng module này
+Thông thường service sẽ dùng runtime starter:
 
-Service thường không dùng `lsf-outbox-core` một mình. Cách dùng chuẩn là:
+```xml
+<dependency>
+  <groupId>com.myorg.lsf</groupId>
+  <artifactId>lsf-outbox-mysql-starter</artifactId>
+</dependency>
+```
 
-1. phụ thuộc `lsf-outbox-core`
-2. chọn thêm một runtime starter theo database
-3. inject `OutboxWriter` trong service code
+## API chính
 
 ```java
-@Transactional
-public void publishAfterUpdate(EventEnvelope envelope, String topic, String key) {
-    // update domain data
-    outboxWriter.append(envelope, topic, key);
+public interface OutboxWriter {
+    long append(EventEnvelope envelope, String topic, String key);
 }
 ```
 
-## Giới hạn hiện tại
+Ví dụ:
 
-- Module này không tự tạo scheduler, repository hay publisher runtime.
-- Nó không phải complete outbox solution nếu đứng một mình; cần một runtime starter theo database.
-- Việc migration schema và ownership của bảng outbox vẫn là quyết định ở tầng adopter.
+```java
+@Transactional
+public void updateOrder(OrderStatusChanged payload) {
+    // update database
+
+    outboxWriter.append(envelope, "order-status-envelope-topic", payload.orderNumber());
+}
+```
+
+## Thành phần chính
+
+| Class | Vai trò |
+|---|---|
+| `OutboxWriter` | Contract để append event vào outbox |
+| `OutboxSql` | Helper SQL chung cho runtime/admin modules |
+
+## Lưu ý
+
+- Module core không tự chạy publisher.
+- Cần chọn runtime DB tương ứng: `lsf-outbox-mysql-starter` hoặc `lsf-outbox-postgres-starter`.
+- Consumer nên quản lý Flyway migration trong project của mình nếu cần kiểm soát version schema nghiêm ngặt.
